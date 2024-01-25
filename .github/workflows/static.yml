@@ -22,7 +22,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Single deploy job since we're just deploying
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      -
+        name: Create Kodi repository
+        run: python scripts/create_repository.py --datadir public addons/repository.kirill.vercetti
+
   deploy:
     environment:
       name: github-pages
