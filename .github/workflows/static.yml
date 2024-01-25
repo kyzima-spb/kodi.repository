@@ -22,15 +22,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      -
-        name: Create Kodi repository
-        run: python scripts/create_repository.py --datadir public addons/repository.kirill.vercetti
+#  build:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#      -
+#        name: Create Kodi repository
+#        run: python scripts/create_repository.py --datadir public addons/repository.kirill.vercetti
 
   deploy:
+#    needs: build
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -38,6 +39,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      -
+        name: Create Kodi repository
+        run: python scripts/create_repository.py --datadir public addons/repository.kirill.vercetti
+      -
+        name: Create directory listing
+        run: python scripts/create_index.py public
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact
