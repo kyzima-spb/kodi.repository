@@ -6,7 +6,7 @@
     provider-name="Kirill Vercetti"
 >
   <requires>
-
+    <import addon="xbmc.addon" version="12.0.0" />
   </requires>
   <extension point="xbmc.addon.repository" name="Kirill Vercetti Kodi repository">
     <dir>
