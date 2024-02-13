@@ -1,3 +1,6 @@
 [submodule "addons/plugin.video.1tv.ru"]
 	path = addons/plugin.video.1tv.ru
 	url = git@github.com:kyzima-spb/plugin.video.1tv.ru.git
+[submodule "addons/script.module.vk_api"]
+	path = addons/script.module.vk_api
+	url = git@github.com:kyzima-spb/script.module.vk_api.git
