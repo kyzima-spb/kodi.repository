@@ -1,0 +1,19 @@
+name: Check the new versions and upgrade
+
+on:
+  push:
+    paths:
+      - .github/workflows/check-and-upgrade.yml
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Check and upgrade
+        id: result
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const result = await github.rest.repos.getLatestRelease({owner: 'python273', repo: 'vk_api'})
+            console.log(result.data)
