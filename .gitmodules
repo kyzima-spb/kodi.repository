@@ -4,3 +4,6 @@
 [submodule "addons/script.module.vk_api"]
 	path = addons/script.module.vk_api
 	url = git@github.com:kyzima-spb/script.module.vk_api.git
+[submodule "addons/plugin.video.uplayer"]
+	path = addons/plugin.video.uplayer
+	url = git@github.com:kyzima-spb/plugin.video.uplayer.git
