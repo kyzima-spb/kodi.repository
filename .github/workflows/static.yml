@@ -34,10 +34,10 @@ jobs:
           submodules: true
       -
         name: Create Kodi repository
-        run: python scripts/create_repository.py --datadir public addons/*
+        run: python scripts/create-repository --datadir public addons/*
       -
         name: Create directory listing
-        run: python scripts/create_index.py public
+        run: python scripts/create-index public
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact

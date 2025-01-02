@@ -1,0 +1,62 @@
+networks:
+  private:
+    internal: true
+  public:
+
+volumes:
+  ca-certificates:
+  kodi-profile:
+  wwwdata:
+
+configs:
+  nginx_default:
+    file: ./docker/nginx/virtual_host.conf
+
+services:
+  nginx:
+    image: nginx:1.27-bookworm
+    networks:
+      private:
+        aliases:
+          - kyzima-spb.github.io
+    configs:
+      - source: nginx_default
+        target: /etc/nginx/conf.d/default.conf
+    volumes:
+      - ./docker/nginx/generate-cert.sh:/docker-entrypoint.d/99-generate-cert.sh:ro
+      - ca-certificates:/usr/local/share/ca-certificates
+      - wwwdata:/var/www:ro
+    environment:
+      REPO_BASE_URL: kyzima-spb.github.io
+
+  kodi:
+    image: ghcr.io/kyzima-spb/kodi:bookworm-slim
+    networks:
+      - private
+      - public
+    ports:
+      - "5900:5900"
+    entrypoint: sh -c "update-ca-certificates && exec /init"
+    volumes:
+      - ca-certificates:/usr/local/share/ca-certificates
+      - kodi-profile:/kodi
+      - ./addons/plugin.video.demo:/kodi/addons/plugin.video.demo
+      - ./addons/repository.kirill.vercetti:/kodi/addons/repository.kirill.vercetti
+#      - ./addons/plugin.video.uplayer:/home/user/.kodi/addons/plugin.video.uplayer
+#      - ./addons/script.module.youtube.dl:/home/user/.kodi/addons/script.module.youtube.dl
+#      - ./addons/script.module.yt.dlp:/home/user/.kodi/addons/script.module.yt.dlp
+      - ./addons/script.module.kodi_useful:/kodi/addons/script.module.kodi_useful
+      - ./addons/script.module.vk_api:/kodi/addons/script.module.vk_api
+    depends_on:
+      - nginx
+
+  repo:
+    image: python:3.13-slim-bookworm
+    environment:
+      PATH: /usr/local/bin/scripts:$PATH
+    volumes:
+      - wwwdata:/var/www
+      - ./addons:/var/www/addons:ro
+      - ./scripts:/usr/local/bin/scripts:ro
+    working_dir: /var/www
+    command: sh -c "generate-repository kodi.repository addons/*"

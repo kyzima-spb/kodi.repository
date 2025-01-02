@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+
+if [ $# -lt 3 ]; then
+  echo >&2 "Usage: $(basename "$0") OUTPUT_DIR ADDONS"
+  exit 1
+fi
+
+outputDir=${1}
+shift
+
+echo >&2 "Clear old files: $(realpath "$outputDir")"
+rm -rf "$outputDir"
+
+echo >&2 "Create repository: found $# addons"
+create-repository --datadir "$outputDir" "$@"
+
+echo >&2 "Create repository index"
+create-index "$outputDir"
+
+echo >&2 'Done.'
