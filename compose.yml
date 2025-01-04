@@ -36,8 +36,11 @@ services:
       - public
     ports:
       - "5900:5900"
-    entrypoint: sh -c "update-ca-certificates && exec /init"
+    environment:
+      KODI_EXTRA_ARGS: --debug
     volumes:
+      - ./docker/kodi/update-cert.sh:/docker-entrypoint.d/99-update-cert.sh:ro
+      - /run/user/1000/pulse:/run/user/1000/pulse
       - ca-certificates:/usr/local/share/ca-certificates
       - kodi-profile:/kodi
       - ./addons/plugin.video.demo:/kodi/addons/plugin.video.demo
