@@ -4,7 +4,6 @@ import sys
 from contextlib import suppress
 from functools import cached_property, partial
 from http import server, HTTPStatus
-import logging
 import mimetypes
 import json
 import pathlib
@@ -13,8 +12,7 @@ import socket
 from string import Template
 import threading
 import typing as t
-from urllib.parse import parse_qs as _parse_qs, urlsplit
-import multiprocessing
+from urllib.parse import parse_qs, urlsplit
 
 try:
     import xbmcaddon
@@ -27,13 +25,12 @@ if t.TYPE_CHECKING:
 
 
 PathLike = t.Union[str, pathlib.Path]
-QueryParams = t.Dict[str, t.Union[t.Any, t.List[t.Any]]]
 
 
 __all__ = (
     'HTTPRequestHandler',
     'HTTPError',
-    'HTTPService',
+    'HTTPServer',
     'Response',
 )
 
@@ -46,21 +43,31 @@ def guess_type(path: PathLike) -> str:
     return ctype
 
 
-def parse_qs(qs: str, type_cast: bool = False) -> QueryParams:
-    """Returns the query string parameters as a dictionary."""
+class QueryParams:
+    def __init__(self, query_string: str) -> None:
+        self._params = {
+            k: v if len(v) > 1 else v[0]
+            for k, v in parse_qs(query_string).items()
+        }
+
+    @staticmethod
     def cast(v):
         with suppress(json.JSONDecodeError):
             v = json.loads(v)
         return v
 
-    def process_value(value):
-        if type_cast:
-            value = [cast(i) for i in value]
-        if len(value) < 2:
-            return value[0]
+    def get(self, name: str) -> t.Union[t.Any, t.List[t.Any]]:
+        value = self.get_raw(name)
+
+        if isinstance(value, list):
+            value = [self.cast(i) for i in value]
+        else:
+            value = self.cast(value)
+
         return value
 
-    return {k: process_value(v) for k, v in _parse_qs(qs).items()}
+    def get_raw(self, name: str) -> t.Union[str, t.List[str]]:
+        return self._params[name]
 
 
 class Response(t.NamedTuple):
@@ -97,13 +104,13 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
         super().__init__(*args, **kwargs)
 
     @cached_property
-    def form(self):
+    def form(self) -> QueryParams:
         ctype = self.headers.get('Content-Type', '')
 
         if ctype.startswith('multipart/form-data'):
             raise HTTPError(HTTPStatus.NOT_IMPLEMENTED)
 
-        return parse_qs(self.post_data.decode('utf-8'))
+        return QueryParams(self.post_data.decode('utf-8'))
 
     @cached_property
     def json(self) -> t.Any:
@@ -114,14 +121,14 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
             raise HTTPError(HTTPStatus.BAD_REQUEST)
 
     @cached_property
-    def post_data(self):
+    def post_data(self) -> bytes:
         content_length = int(self.headers.get('Content-Length', 0))
         return self.rfile.read(content_length)
 
     @cached_property
     def query(self) -> QueryParams:
         """Returns the URL query string parameters."""
-        return parse_qs(self.url.query)
+        return QueryParams(self.url.query)
 
     @cached_property
     def url(self) -> SplitResult:
@@ -131,7 +138,7 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
         """
         return urlsplit(self.path)
 
-    def process_request(self):
+    def process_request(self) -> None:
         method = self.command.lower()
 
         if self.url.path.startswith('/static'):
@@ -149,8 +156,9 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
         if method not in handlers:
             return self.send_error(HTTPStatus.METHOD_NOT_ALLOWED)
 
+        handler = handlers[method]
+
         try:
-            handler = handlers[method]
             resp = handler(self)
 
             if isinstance(resp, HTTPStatus):
@@ -173,9 +181,9 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
 
             self.wfile.write(r.get_body())
         except HTTPError as err:
-            return self.send_error(err.status)
+            self.send_error(err.status)
         except Exception as err:
-            return self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(err))
+            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(err))
 
     do_DELETE = process_request
     do_GET = process_request
@@ -250,6 +258,10 @@ class HTTPServer:
             HTTPRequestHandler, url_handlers=self._url_handlers, root_dir=root_dir
         )
 
+    def delete(self, path: str):
+        """Registers a DELETE request handler for the specified path."""
+        return self.register_handler(path, method='delete')
+
     def get(self, path: str):
         """Registers a GET request handler for the specified path."""
         return self.register_handler(path, method='get')
@@ -264,6 +276,10 @@ class HTTPServer:
     def post(self, path: str):
         """Registers a POST request handler for the specified path."""
         return self.register_handler(path, method='post')
+
+    def put(self, path: str):
+        """Registers a PUT request handler for the specified path."""
+        return self.register_handler(path, method='put')
 
     def register_handler(self, path: str, method: str):
         def decorator(handler):
@@ -330,9 +346,9 @@ class HTTPServer:
 if __name__ == '__main__':
     srv = HTTPServer(port=9000, root_dir='.')
 
-    @srv.get('/')
+    @srv.post('/')
     def f(request_handler: HTTPRequestHandler):
-        print(request_handler.url)
+        print(request_handler.form.get('test'))
         return request_handler.send_json({'status': True})
 
     srv.start()
