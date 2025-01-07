@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sys
-from contextlib import suppress
 from functools import cached_property, partial
 from http import server, HTTPStatus
 import mimetypes
@@ -12,7 +11,9 @@ import socket
 from string import Template
 import threading
 import typing as t
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
+
+from .core import QueryParams
 
 try:
     import xbmcaddon
@@ -41,33 +42,6 @@ def guess_type(path: PathLike) -> str:
     if ctype is None:
         ctype = 'application/octet-stream'
     return ctype
-
-
-class QueryParams:
-    def __init__(self, query_string: str) -> None:
-        self._params = {
-            k: v if len(v) > 1 else v[0]
-            for k, v in parse_qs(query_string).items()
-        }
-
-    @staticmethod
-    def cast(v):
-        with suppress(json.JSONDecodeError):
-            v = json.loads(v)
-        return v
-
-    def get(self, name: str) -> t.Union[t.Any, t.List[t.Any]]:
-        value = self.get_raw(name)
-
-        if isinstance(value, list):
-            value = [self.cast(i) for i in value]
-        else:
-            value = self.cast(value)
-
-        return value
-
-    def get_raw(self, name: str) -> t.Union[str, t.List[str]]:
-        return self._params[name]
 
 
 class Response(t.NamedTuple):
@@ -140,6 +114,7 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
 
     def process_request(self) -> None:
         method = self.command.lower()
+        # self.request
 
         if self.url.path.startswith('/static'):
             if method not in ('get', 'head'):
@@ -314,7 +289,7 @@ class HTTPServer:
         self.log('The server is running at http://%s:%d' % self._address)
 
         if run_in_thread:
-            self._httpd_thread = threading.Thread(target=self._httpd.serve_forever)
+            self._httpd_thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
             self._httpd_thread.start()
         else:
             self._httpd.serve_forever()
