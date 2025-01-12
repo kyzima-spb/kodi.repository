@@ -57,21 +57,40 @@ class Router:
         self.plugin_url = plugin_url
         self.index_route = index_route
         self.route_param_name = route_param_name
-        self.routes = {}
+        self._routes = {}
+        self._error_handlers = {}
+
+    def _find_exception_handler(self, err: Exception):
+        for exc_type in type(err).__mro__:
+            if exc_type in self._error_handlers:
+                return self._error_handlers[exc_type]
+        return None
 
     def dispatch(self, qs: str):
         q = QueryParams(qs.strip('?'))
         route_name = q.get_raw(self.route_param_name, default=self.index_route)
 
-        if route_name not in self.routes:
+        if route_name not in self._routes:
             logger.error('Default route not found.')
         else:
-            func = self.routes[route_name]
-            func(q=q)
+            func = self._routes[route_name]
+            try:
+                func(q=q)
+            except Exception as err:
+                handler = self._find_exception_handler(err)
+                if handler is None:
+                    raise
+                handler(err, self)
+
+    def register_error_handler(self, exc_type: t.Type[Exception]):
+        def decorator(func):
+            self._error_handlers[exc_type] = func
+            return func
+        return decorator
 
     def route(self, name: str = ''):
         def decorator(func):
-            self.routes[name or self.index_route] = func
+            self._routes[name or self.index_route] = func
             return func
         return decorator
 
@@ -88,14 +107,14 @@ class Router:
             kwargs dict "argument=value" pairs
         """
         if callable(func_or_name):
-            for name, func in self.routes.items():
+            for name, func in self._routes.items():
                 if func is func_or_name:
                     kwargs[self.route_param_name] = name
                     break
             else:
                 raise RuntimeError('The passed argument func is not a route handler.')
         else:
-            if func_or_name not in self.routes:
+            if func_or_name not in self._routes:
                 raise RuntimeError('The passed argument is not a route name.')
             kwargs[self.route_param_name] = func_or_name
 
