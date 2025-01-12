@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="plugin.vk.com" name="VK" version="0.0.1+matrix.1" provider-name="Kirill Vercetti">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+    <import addon="inputstream.adaptive" version="20.0.0"/>
+    <import addon="script.module.youtube.dl" version="19.912.1"/>
+  </requires>
+  <extension point="xbmc.python.pluginsource" library="addon.py">
+    <provides>image video</provides>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <email>office@kyzima-spb.com</email>
+    <source>https://github.com/kyzima-spb/kodi.repository/tree/master/addons/plugin.video.vk.com</source>
+    <licence>MIT</licence>
+  </extension>
+  <assets>
+    <icon>resources/icon.png</icon>
+    <fanart>resources/fanart.png</fanart>
+    <screenshot>resources/screenshots/screenshot-01.png</screenshot>
+    <screenshot>resources/screenshots/screenshot-02.png</screenshot>
+    <screenshot>resources/screenshots/screenshot-03.png</screenshot>
+    <screenshot>resources/screenshots/screenshot-04.png</screenshot>
+  </assets>
+</addon>
