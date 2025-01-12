@@ -1,15 +1,25 @@
 from __future__ import annotations
 import logging
+import typing as t
 
 import xbmc
 import xbmcaddon
 
 
-__all__ = ('init_logger',)
+__all__ = (
+    'get_addon',
+    'init_logger',
+)
 
 
-ADDON = xbmcaddon.Addon()
-ADDON_ID = ADDON.getAddonInfo('id')
+def get_addon(addon_id: t.Optional[str] = None) -> xbmcaddon.Addon:
+    if addon_id is not None:
+        return xbmcaddon.Addon(addon_id)
+    return xbmcaddon.Addon()
+
+
+def get_settings(addon_id: t.Optional[str] = None) -> xbmcaddon.Settings:
+    return get_addon(addon_id).getSettings()
 
 
 class KodiLogHandler(logging.Handler):
@@ -30,8 +40,10 @@ def init_logger(
     name: str | None = None,
     level: int = logging.DEBUG,
 ) -> None:
+    addon_id = get_addon().getAddonInfo('id')
+
     handler = KodiLogHandler(level)
-    handler.setFormatter(logging.Formatter(f'%(levelname)s [{ADDON_ID}][%(name)s] %(message)s'))
+    handler.setFormatter(logging.Formatter(f'%(levelname)s [{addon_id}][%(name)s] %(message)s'))
 
     logger = logging.getLogger(name)
     logger.setLevel(level)
