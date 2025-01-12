@@ -44,6 +44,7 @@ services:
       - ca-certificates:/usr/local/share/ca-certificates
       - kodi-profile:/kodi
       - ./addons/plugin.video.demo:/kodi/addons/plugin.video.demo
+      - ./addons/plugin.vk.com:/kodi/addons/plugin.vk.com
       - ./addons/repository.kirill.vercetti:/kodi/addons/repository.kirill.vercetti
 #      - ./addons/plugin.video.uplayer:/home/user/.kodi/addons/plugin.video.uplayer
 #      - ./addons/script.module.youtube.dl:/home/user/.kodi/addons/script.module.youtube.dl
