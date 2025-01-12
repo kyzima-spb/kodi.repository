@@ -1,4 +1,5 @@
 from contextlib import suppress
+import configparser
 import logging
 import json
 import typing as t
@@ -13,6 +14,18 @@ __all__ = (
 logger = logging.getLogger()
 
 
+def cast_bool(v: str) -> bool:
+    with suppress(KeyError):
+        v = configparser.ConfigParser.BOOLEAN_STATES[v]
+    return bool(v)
+
+
+def loads(v):
+    with suppress(json.JSONDecodeError):
+        v = json.loads(v)
+    return v
+
+
 class QueryParams:
     def __init__(self, query_string: str) -> None:
         self._params = {
@@ -20,26 +33,46 @@ class QueryParams:
             for k, v in parse_qs(query_string, keep_blank_values=True).items()
         }
 
-    @staticmethod
-    def cast(v):
-        with suppress(json.JSONDecodeError):
-            v = json.loads(v)
-        return v
-
     def __iter__(self):
         return iter(self._params.items())
 
-    def get(self, name: str, default=None) -> t.Union[t.Any, t.List[t.Any]]:
-        value = self.get_raw(name, default)
+    def get(
+        self,
+        name: str,
+        default: t.Optional[t.Union[t.Any, t.List[t.Any]]] = None,
+        type_cast: t.Callable[[str], t.Any] = loads,
+    ) -> t.Optional[t.Union[t.Any, t.List[t.Any]]]:
+        value = self.get_string(name)
+
+        if value is None:
+            return default
 
         if isinstance(value, list):
-            value = [self.cast(i) for i in value]
+            value = [type_cast(i) for i in value]
         else:
-            value = self.cast(value)
+            value = type_cast(value)
 
         return value
 
-    def get_raw(self, name: str, default=None) -> t.Union[str, t.List[str]]:
+    def get_bool(
+        self,
+        name: str,
+        default: t.Optional[t.Union[bool, t.List[bool]]] = None,
+    ) -> t.Optional[t.Union[bool, t.List[bool]]]:
+        return self.get(name, default, type_cast=cast_bool)
+
+    def get_int(
+        self,
+        name: str,
+        default: t.Optional[t.Union[int, t.List[int]]] = None,
+    ) -> t.Optional[t.Union[int, t.List[int]]]:
+        return self.get(name, default, type_cast=int)
+
+    def get_string(
+        self,
+        name: str,
+        default: t.Optional[t.Union[str, t.List[str]]] = None,
+    ) -> t.Optional[t.Union[str, t.List[str]]]:
         return self._params.get(name, default)
 
 
@@ -61,7 +94,7 @@ class Router:
 
     def dispatch(self, qs: str):
         q = QueryParams(qs.strip('?'))
-        route_name = q.get_raw(self.route_param_name, default=self.index_route)
+        route_name = q.get_string(self.route_param_name, default=self.index_route)
 
         if route_name not in self.routes:
             logger.error('Default route not found.')
@@ -71,14 +104,17 @@ class Router:
 
     def route(self, name: str = ''):
         def decorator(func):
-            self.routes[name or self.index_route] = func
+            self.register_route(name, func)
             return func
         return decorator
+
+    def register_route(self, name: str, handler: t.Callable[..., None]) -> None:
+        self.routes[name or self.index_route] = handler
 
     def url_for(
         self,
         func_or_name: t.Union[str, t.Callable[..., None]],
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         Returns a URL for calling the plugin recursively from the given set of keyword arguments.
@@ -100,3 +136,11 @@ class Router:
             kwargs[self.route_param_name] = func_or_name
 
         return '%s?%s' % (self.plugin_url, urlencode(kwargs))
+
+    # def next_url(
+    #     self,
+    #     func_or_name: t.Union[str, t.Callable[..., None]],
+    #     offset: int = 0,
+    # ) -> str:
+    #     limit = 25
+    #     return self.url_for(func_or_name, offset=offset + limit)
