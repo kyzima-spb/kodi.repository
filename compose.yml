@@ -55,6 +55,8 @@ services:
 
   repo:
     image: python:3.13-slim-bookworm
+    networks:
+      - private
     environment:
       PATH: /usr/local/bin/scripts:$PATH
     volumes:
