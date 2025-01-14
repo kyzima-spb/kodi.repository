@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<settings>
+  <category label="Base">
+    <setting id="items_per_page"
+             label="Items per page"
+             type="slider"
+             default="25"
+             range="25,25,100"
+             option="int"
+    />
+<!--    <setting id="hide_deactivated"-->
+<!--             label="Hide blocked and deleted"-->
+<!--             type="bool"-->
+<!--             default="true"-->
+<!--    />-->
+    <setting id="hide_deactivated_friends"
+             label="Hide blocked and deleted accounts"
+             type="bool"
+             default="true"
+    />
+    <setting id="hide_deactivated_groups"
+             label="Hide blocked and deleted groups"
+             type="bool"
+             default="true"
+    />
+    <setting id="age_limit"
+             label="Age limit"
+             type="enum"
+             values="No|16+|18+"
+    />
+    <setting id="vk_last_login"
+             label="Last used login"
+             type="text"
+             enable="false"
+    />
+  </category>
+</settings>
