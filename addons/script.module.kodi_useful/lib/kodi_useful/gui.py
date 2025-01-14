@@ -1,10 +1,15 @@
+from __future__ import annotations
 import typing as t
 
 import xbmc
 import xbmcgui
 
 
-__all__ = ('alert', 'prompt')
+__all__ = (
+    'alert',
+    'prompt',
+    'ListItem',
+)
 
 
 class PromptResult(t.NamedTuple):
@@ -62,3 +67,12 @@ def prompt(
                 return PromptResult(type_cast(value))
             except ValueError as e:
                 alert('Error', str(e))
+
+
+class ListItem(xbmcgui.ListItem):
+    @classmethod
+    def next_item(cls, per_page: int, offset: int = 0) -> ListItem:
+        label = 'Next page (%d)' % (offset // per_page)
+        li = cls(label)
+        li.getVideoInfoTag().setPlot(label)
+        return li
