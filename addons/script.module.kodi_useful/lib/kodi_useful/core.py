@@ -1,3 +1,4 @@
+import sys
 from contextlib import suppress
 import configparser
 import logging
@@ -28,6 +29,7 @@ def loads(v):
 
 class QueryParams:
     def __init__(self, query_string: str) -> None:
+        query_string = query_string.strip('?')
         self._params = {
             k: v if len(v) > 1 else v[0]
             for k, v in parse_qs(query_string, keep_blank_values=True).items()
@@ -75,6 +77,9 @@ class QueryParams:
     ) -> t.Optional[t.Union[str, t.List[str]]]:
         return self._params.get(name, default)
 
+    def set(self, name: str, value: t.Any) -> None:
+        self._params[name] = value
+
 
 class Router:
     def __init__(
@@ -99,8 +104,12 @@ class Router:
                 return self._error_handlers[exc_type]
         return None
 
-    def dispatch(self, qs: str):
-        q = QueryParams(qs.strip('?'))
+    @staticmethod
+    def current_query() -> QueryParams:
+        return QueryParams(sys.argv[2])
+
+    def dispatch(self, qs: t.Optional[str] = None):
+        q = self.current_query() if qs is None else QueryParams(qs)
         route_name = q.get_string(self.route_param_name, default=self.index_route)
 
         if route_name not in self._routes:
@@ -142,6 +151,11 @@ class Router:
             action str
             kwargs dict "argument=value" pairs
         """
+        content_type = self.current_query().get_string('content_type')
+
+        if content_type is not None:
+            kwargs['content_type'] = content_type
+
         if callable(func_or_name):
             for name, func in self._routes.items():
                 if func is func_or_name:
@@ -156,10 +170,10 @@ class Router:
 
         return '%s?%s' % (self.plugin_url, urlencode(kwargs))
 
-    # def next_url(
-    #     self,
-    #     func_or_name: t.Union[str, t.Callable[..., None]],
-    #     offset: int = 0,
-    # ) -> str:
-    #     limit = 25
-    #     return self.url_for(func_or_name, offset=offset + limit)
+    def url_from_current(self, **kwargs: t.Any) -> str:
+        q = QueryParams(sys.argv[2][1:])
+
+        for name, value in kwargs.items():
+            q.set(name, value)
+
+        return '%s?%s' % (self.plugin_url, urlencode(dict(q)))
