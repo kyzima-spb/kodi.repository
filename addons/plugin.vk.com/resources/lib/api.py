@@ -34,6 +34,7 @@ class AgeLimit(enum.IntEnum):
     NO = 1
     SIXTEEN = 2
     EIGHTEEN = 3
+    COUNTRY_RESTRICT = 666
 
 
 class ErrorCode(enum.IntEnum):
@@ -250,7 +251,7 @@ def get_groups(
         offset=offset,
     )
 
-    groups = filter(lambda i: i['age_limits'] <= age_limit, r['items'])
+    groups = filter(lambda i: i.get('age_limits', AgeLimit.COUNTRY_RESTRICT) <= age_limit, r['items'])
     r['items'] = []
 
     if skip_deactivated:
