@@ -1,5 +1,7 @@
+from functools import wraps
 from textwrap import dedent
 import logging
+import os
 import sys
 
 import xbmc
@@ -19,10 +21,11 @@ from . import api
 router = Router(sys.argv[0])
 HANDLE = int(sys.argv[1])
 ADDON = get_addon()
-DEBUG = True
+CACHE_TO_DISC = '--debug' not in os.environ.get('KODI_EXTRA_ARGS', '')
 
 
 def pagination(func):
+    @wraps(func)
     def wrapper(q):
         per_page = q.get_int('per_page', ADDON.getSettingInt('items_per_page'))
         offset = q.get_int('offset', 0)
@@ -48,7 +51,7 @@ def index(q):
             item = ListItem(title)
             xbmcplugin.addDirectoryItem(HANDLE, url, item, isFolder=is_folder)
 
-    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=DEBUG)
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=CACHE_TO_DISC)
 
 
 @router.route('friends.get')
@@ -82,7 +85,7 @@ def list_friends(q, per_page, offset):
         item = ListItem.next_item(per_page, offset)
         xbmcplugin.addDirectoryItem(HANDLE, url, item, isFolder=True)
 
-    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=DEBUG)
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=CACHE_TO_DISC)
 
 
 @router.route('groups.get')
@@ -116,7 +119,7 @@ def list_groups(q, per_page, offset):
         item = ListItem.next_item(per_page, offset)
         xbmcplugin.addDirectoryItem(HANDLE, url, item, isFolder=True)
 
-    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=DEBUG)
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=CACHE_TO_DISC)
 
 
 @router.route('photo.albums')
@@ -147,7 +150,7 @@ def list_photo_albums(q, per_page, offset):
         item = ListItem.next_item(per_page, offset)
         xbmcplugin.addDirectoryItem(HANDLE, url, item, isFolder=True)
 
-    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=DEBUG)
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=CACHE_TO_DISC)
 
 
 @router.route('photos.list')
@@ -186,7 +189,7 @@ def photo_list(q, per_page, offset):
         item = ListItem.next_item(per_page, offset)
         xbmcplugin.addDirectoryItem(HANDLE, url, item, isFolder=True)
 
-    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=DEBUG)
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=CACHE_TO_DISC)
 
 
 @router.route('video.albums')
@@ -219,7 +222,7 @@ def list_video_albums(q, per_page, offset):
         item = ListItem.next_item(per_page, offset)
         xbmcplugin.addDirectoryItem(HANDLE, url, item, isFolder=True)
 
-    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=DEBUG)
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=CACHE_TO_DISC)
 
 
 @router.route('video.list')
@@ -259,7 +262,7 @@ def video_list(q, per_page, offset):
         item = ListItem.next_item(per_page, offset)
         xbmcplugin.addDirectoryItem(HANDLE, url, item, isFolder=True)
 
-    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=DEBUG)
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=CACHE_TO_DISC)
 
 
 from YDStreamExtractor import getVideoInfo, setOutputCallback, overrideParam
@@ -311,14 +314,23 @@ def has_internet_connection(url: str) -> bool:
 
 
 def catch_api_error(func):
+    @wraps(func)
     def wrapper(*args, **kwargs):
+        succeeded = False
         try:
-            return func(*args, **kwargs)
+            result = func(*args, **kwargs)
+            succeeded = True
+            return result
         except vk_api.ApiError as err:
-            if err.code == api.ErrorCode.AUTHORIZATION_FAILED:
-                return err.try_method() if api.login() else None
-            logger.debug(err)
-            raise
+            if err.code != api.ErrorCode.AUTHORIZATION_FAILED:
+                logger.debug(err)
+                raise
+
+            if api.login():
+                xbmc.executebuiltin('Container.Update(%s, true)' % Router.current_url())
+        finally:
+            if not succeeded:
+                xbmcplugin.endOfDirectory(HANDLE, False, False)
     return wrapper
 
 

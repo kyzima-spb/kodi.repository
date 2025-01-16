@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.vk.com" name="VK" version="0.0.2+matrix.1" provider-name="Kirill Vercetti">
+<addon id="plugin.vk.com" name="VK" version="0.0.3+matrix.1" provider-name="Kirill Vercetti">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <import addon="inputstream.adaptive" version="20.0.0"/>
-    <import addon="script.module.kodi_useful" version="0.0.1"/>
+    <import addon="script.module.kodi_useful" version="0.0.2"/>
     <import addon="script.module.pyxbmct" />
     <import addon="script.module.vk_api" version="11.9.9"/>
     <import addon="script.module.youtube.dl" version="19.912.1"/>

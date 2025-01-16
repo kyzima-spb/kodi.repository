@@ -116,6 +116,37 @@ class CaptchaDialog(pyxbmct.AddonDialogWindow):
         self.setFocus(self.value_field)
 
 
+class VkApi:
+    __slots__ = ('_kwargs', '_vk_session',)
+
+    def __init__(self, **kwargs):
+        object.__setattr__(self, '_kwargs', kwargs)
+        object.__setattr__(self, '_vk_session', self._get_session())
+
+    # def __bool__(self):
+    #     return 'login' in self._kwargs and 'token' in self._vk_session.token
+
+    def __dir__(self):
+        return dir(self._vk_session)
+
+    def __getattr__(self, name):
+        return getattr(self._vk_session, name)
+
+    def __repr__(self) -> str:
+        return repr(self._vk_session)
+
+    def __setattr__(self, name, value):
+        setattr(self._vk_session, name, value)
+
+    def _get_session(self) -> vk_api.VkApi:
+        return vk_api.VkApi(**self._kwargs)
+
+    def set_credentials(self, username: str, password: str) -> None:
+        self._kwargs['login'] = username
+        self._kwargs['password'] = password
+        object.__setattr__(self, '_vk_session', self._get_session())
+
+
 def auth_handler() -> t.Tuple[int, bool]:
     code = prompt('Enter authentication code', required=True, type_cast=int)
 
@@ -164,7 +195,7 @@ def get_original_photo(photo):
     }
 
 
-def get_vk_session() -> vk_api.VkApi:
+def get_vk_session() -> VkApi:
     last_login = get_addon().getSettingString('vk_last_login') or None
     logger.debug(f'Last login => {last_login}')
 
@@ -174,8 +205,8 @@ def get_vk_session() -> vk_api.VkApi:
     profile_path.mkdir(parents=True, exist_ok=True)
     config_filename = profile_path / 'vk_config.json'
 
-    return vk_api.VkApi(
-        last_login,
+    return VkApi(
+        login=last_login,
         config_filename=config_filename,
         auth_handler=auth_handler,
         captcha_handler=captcha_handler,
@@ -198,8 +229,7 @@ def login():
         )
         return False
 
-    vk_session.login = username.value
-    vk_session.password = password.value
+    vk_session.set_credentials(username.value, password.value)
 
     try:
         vk_session.auth(reauth=True, token_only=True)

@@ -84,7 +84,7 @@ class QueryParams:
 class Router:
     def __init__(
         self,
-        plugin_url: str,
+        plugin_url: str = '',
         index_route: str = '',
         route_param_name: str = 'action',
     ) -> None:
@@ -92,7 +92,7 @@ class Router:
         Arguments:
             plugin_url str the plugin url in plugin:// notation.
         """
-        self.plugin_url = plugin_url
+        self.plugin_url = plugin_url or sys.argv[0]
         self.index_route = index_route
         self.route_param_name = route_param_name
         self._routes = {}
@@ -107,6 +107,10 @@ class Router:
     @staticmethod
     def current_query() -> QueryParams:
         return QueryParams(sys.argv[2])
+
+    @staticmethod
+    def current_url() -> str:
+        return '%s%s' % (sys.argv[0], sys.argv[2])
 
     def dispatch(self, qs: t.Optional[str] = None):
         q = self.current_query() if qs is None else QueryParams(qs)
