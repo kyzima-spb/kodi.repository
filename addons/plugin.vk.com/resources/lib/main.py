@@ -322,12 +322,14 @@ def catch_api_error(func):
             succeeded = True
             return result
         except vk_api.ApiError as err:
-            if err.code != api.ErrorCode.AUTHORIZATION_FAILED:
+            if err.code == api.ErrorCode.AUTHORIZATION_FAILED:
+                if api.login():
+                    xbmc.executebuiltin('Container.Update(%s, true)' % Router.current_url())
+            elif err.code == api.ErrorCode.ACCESS_DENIED:
+                alert('Error', err.error['error_msg'])
+            else:
                 logger.debug(err)
                 raise
-
-            if api.login():
-                xbmc.executebuiltin('Container.Update(%s, true)' % Router.current_url())
         finally:
             if not succeeded:
                 xbmcplugin.endOfDirectory(HANDLE, False, False)

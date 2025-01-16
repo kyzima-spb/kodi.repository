@@ -40,6 +40,7 @@ class AgeLimit(enum.IntEnum):
 class ErrorCode(enum.IntEnum):
     """Коды ошибок VK API."""
     AUTHORIZATION_FAILED = 5
+    ACCESS_DENIED = 15
 
 
 class CaptchaDialog(pyxbmct.AddonDialogWindow):
