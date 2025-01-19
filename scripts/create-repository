@@ -59,6 +59,7 @@ import errno
 import gzip
 import hashlib
 import io
+import itertools
 import os
 import re
 import shutil
@@ -100,10 +101,13 @@ def get_archive_basename(addon_metadata):
 
 
 def get_metadata_basenames(addon_metadata):
-    return ([(basename, basename) for basename in METADATA_BASENAMES] +
-            [(
-                'changelog.txt',
-                'changelog-{}.txt'.format(addon_metadata.version))])
+    root = addon_metadata.root
+
+    return itertools.chain(
+        [(asset.text, asset.text) for asset in root.findall('.//assets/*')],
+        [(basename, basename) for basename in METADATA_BASENAMES],
+        [('changelog.txt', 'changelog-{}.txt'.format(addon_metadata.version))],
+    )
 
 
 def is_url(addon_location):
@@ -164,13 +168,13 @@ def generate_checksum(archive_path, is_binary=True, checksum_path_opt=None):
 
 
 def copy_metadata_files(source_folder, addon_target_folder, addon_metadata):
-    for (source_basename, target_basename) in get_metadata_basenames(
-            addon_metadata):
+    for (source_basename, target_basename) in get_metadata_basenames(addon_metadata):
         source_path = os.path.join(source_folder, source_basename)
+        target_path = os.path.join(addon_target_folder, target_basename)
+
         if os.path.isfile(source_path):
-            shutil.copyfile(
-                source_path,
-                os.path.join(addon_target_folder, target_basename))
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            shutil.copyfile(source_path, target_path)
 
 
 def on_remove_error(function, path, excinfo):
