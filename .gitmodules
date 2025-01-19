@@ -7,3 +7,6 @@
 [submodule "addons/plugin.video.uplayer"]
 	path = addons/plugin.video.uplayer
 	url = git@github.com:kyzima-spb/plugin.video.uplayer.git
+[submodule "addons/plugin.vk.com"]
+	path = addons/plugin.vk.com
+	url = git@github.com:kyzima-spb/plugin.vk.com.git
