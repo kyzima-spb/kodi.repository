@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="script.module.yt-dlp" name="yt_dlp" version="2025.1.15" provider-name="Kirill Vercetti">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+  </requires>
+  <extension point="xbmc.python.module" library="lib"/>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">A feature-rich command-line audio/video downloader</summary>
+    <summary lang="ru_RU">Многофункциональный загрузчик аудио/видео для командной строки</summary>
+    <description lang="en_GB">This is not a fork of the youtube.dl addon, but simply an integration of the yt_dlp module.</description>
+    <description lang="ru_RU">Это не форк аддона youtube.dl, а просто интеграция модуля yt_dlp.</description>
+    <license>Unlicense license</license>
+    <platform>all</platform>
+    <website>https://github.com/yt-dlp/yt-dlp#readme</website>
+    <source>https://github.com/yt-dlp/yt-dlp</source>
+    <assets>
+      <icon>resources/icon.png</icon>
+    </assets>
+  </extension>
+</addon>
