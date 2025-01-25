@@ -1,0 +1,11 @@
+[project]
+name = "Kodi-Useful-Stubs"
+version = "0.0.3"
+description = "Stub modules that re-create Kodi-Useful Python API"
+license = {text = "MIT"}
+authors = [
+    {name = "Kirill Vercetti", email = "office@kyzima-spb.com"},
+]
+keywords = [
+    "kodi",
+]

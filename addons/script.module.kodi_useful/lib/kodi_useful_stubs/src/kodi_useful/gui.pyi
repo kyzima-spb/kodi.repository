@@ -1,0 +1,16 @@
+import typing as t
+import xbmcgui
+
+__all__ = ['alert', 'prompt', 'ListItem']
+
+class PromptResult(t.NamedTuple):
+    value: t.Any
+    canceled: bool = ...
+    def __bool__(self) -> bool: ...
+
+def alert(title: str, message: str) -> bool: ...
+def prompt(msg: str, required: bool = False, default: t.Any | None = None, type_cast: t.Callable[[str], t.Any] = None, hidden: bool = False) -> PromptResult: ...
+
+class ListItem(xbmcgui.ListItem):
+    @classmethod
+    def next_item(cls, per_page: int, offset: int = 0) -> ListItem: ...
