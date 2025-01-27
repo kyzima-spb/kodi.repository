@@ -16,7 +16,11 @@ class Router:
     plugin_url: Incomplete
     index_route: Incomplete
     route_param_name: Incomplete
-    def __init__(self, plugin_url: str = '', index_route: str = '', route_param_name: str = 'action') -> None: ...
+    def __init__(self, plugin_url: str = '', index_route: str = '', route_param_name: str = 'action') -> None:
+        """
+        Arguments:
+            plugin_url str the plugin url in plugin:// notation.
+        """
     @staticmethod
     def current_query() -> QueryParams: ...
     @staticmethod
@@ -25,5 +29,12 @@ class Router:
     def register_error_handler(self, exc_type: type[Exception]): ...
     def route(self, name: str = ''): ...
     def register_route(self, name: str, handler: t.Callable[..., None]) -> None: ...
-    def url_for(self, func_or_name: str | t.Callable[..., None], **kwargs) -> str: ...
+    def url_for(self, func_or_name: str | t.Callable[..., None], **kwargs) -> str:
+        '''
+        Returns a URL for calling the plugin recursively from the given set of keyword arguments.
+
+        Arguments:
+            action str
+            kwargs dict "argument=value" pairs
+        '''
     def url_from_current(self, **kwargs: t.Any) -> str: ...

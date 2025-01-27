@@ -1,0 +1,7 @@
+Metadata-Version: 2.2
+Name: Kodi-Useful-Stubs
+Version: 0.0.3
+Summary: Stub modules that re-create Kodi-Useful Python API
+Author-email: Kirill Vercetti <office@kyzima-spb.com>
+License: MIT
+Keywords: kodi
