@@ -3,6 +3,15 @@ from _typeshed import Incomplete
 
 __all__ = ['QueryParams', 'Router']
 
+class Addon:
+    addon: Incomplete
+    id: Incomplete
+    url: Incomplete
+    handle: Incomplete
+    debug: Incomplete
+    logger: Incomplete
+    def __init__(self, debug: bool = False) -> None: ...
+
 class QueryParams:
     def __init__(self, query_string: str) -> None: ...
     def __iter__(self): ...
