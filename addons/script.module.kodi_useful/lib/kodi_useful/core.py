@@ -1,30 +1,133 @@
 import sys
 from contextlib import suppress
 import configparser
+import inspect
 import logging
 import json
+import os
 import typing as t
 from urllib.parse import parse_qs, urlencode
 
+import xbmc
+from xbmcvfs import translatePath
+
+from . import utils
+
 
 __all__ = (
+    'Addon',
     'QueryParams',
     'Router',
 )
 
-logger = logging.getLogger()
+
+F = t.TypeVar('F', bound=t.Callable[..., t.Any])
 
 
 def cast_bool(v: str) -> bool:
-    with suppress(KeyError):
-        v = configparser.ConfigParser.BOOLEAN_STATES[v]
-    return bool(v)
+    return configparser.ConfigParser.BOOLEAN_STATES.get(v, bool(v))
 
 
-def loads(v):
+def loads(v: str) -> t.Any:
     with suppress(json.JSONDecodeError):
         v = json.loads(v)
     return v
+
+
+class Addon:
+    _instances: t.ClassVar[t.Dict[str, 'Addon']] = {}
+
+    def __init__(
+        self,
+        addon_id: t.Optional[str] = None,
+        locale_map: t.Optional[t.Dict[str, int]] = None,
+        locale_map_file: t.Optional[str] = None,
+        debug: bool = False,
+    ) -> None:
+        self._instances[str(addon_id)] = self
+
+        self.addon = utils.get_addon(addon_id)
+        self.id = addon_id or self.addon.getAddonInfo('id')
+
+        self.addon_dir = translatePath(self.addon.getAddonInfo('path'))
+        self.addon_data_dir = translatePath(self.addon.getAddonInfo('profile'))
+
+        if locale_map_file is not None:
+            locale_map_file = self.get_path(locale_map_file)
+
+            with open(locale_map_file) as f:
+                locale_map = json.load(f)
+
+        self.locale_map = locale_map or {}
+        self.debug = debug or utils.debug_argument_passed()
+
+        if self.debug:
+            self.logger = utils.get_logger(self.id, logging.DEBUG)
+        else:
+            self.logger = utils.get_logger(self.id)
+
+        self.url = sys.argv[0] if len(sys.argv) > 0 else ''
+        self.handle = int(sys.argv[1]) if len(sys.argv) > 1 else 0
+        self.query = QueryParams(sys.argv[2] if len(sys.argv) > 2 else '')
+        self.router = Router(self)
+
+        self.logger.debug(f'URL: {self.url} | HANDLE: {self.handle}')
+
+    def error_handler(self, exc_type: t.Type[Exception]) -> t.Callable[[F], F]:
+        """Adds a handler for the passed exception type."""
+        def decorator(handler: F) -> F:
+            self.router.register_error_handler(exc_type, handler)
+            return handler
+        return decorator
+
+    def get_data_path(self, name: str, *paths: str) -> str:
+        """Returns the path to the plugin user files."""
+        return os.path.join(self.addon_data_dir, name, *paths)
+
+    @classmethod
+    def get_instance(cls, addon_id: t.Optional[str] = None) -> t.Optional['Addon']:
+        return cls._instances.get(str(addon_id))
+
+    def get_path(self, name: str, *paths: str) -> str:
+        """Returns the path to the plugin files."""
+        return os.path.join(self.addon_dir, name, *paths)
+
+    def localize(self, string_id: t.Union[str, int], fallback: str = '') -> str:
+        """Returns the translation for the passed identifier."""
+        if not fallback:
+            fallback = str(string_id)
+
+        if not isinstance(string_id, int):
+            string_id = self.locale_map.get(string_id, -1)
+
+        if string_id < 0:
+            return fallback
+
+        source = self.addon if 30000 <= string_id < 31000 else xbmc
+        result = source.getLocalizedString(string_id)
+
+        return result if result else fallback
+
+    def route(
+        self,
+        func_or_none: t.Optional[F] = None,
+        is_root: bool = False,
+    ) -> t.Callable[[F], F]:
+        """
+        Adds a handler for the page.
+
+        Arguments:
+            func_or_none (callable): Handler function.
+            is_root (bool): This is the root page.
+        """
+        def decorator(func: F) -> F:
+            self.router.register_route(func, is_root=is_root)
+            return func
+
+        if func_or_none is not None:
+            return decorator(func_or_none)
+
+        return decorator
 
 
 class QueryParams:
@@ -35,7 +138,7 @@ class QueryParams:
             for k, v in parse_qs(query_string, keep_blank_values=True).items()
         }
 
-    def __iter__(self):
+    def __iter__(self) -> t.Iterator[t.Tuple[str, t.Union[str, t.List[str]]]]:
         return iter(self._params.items())
 
     def get(
@@ -84,69 +187,92 @@ class QueryParams:
 class Router:
     def __init__(
         self,
+        addon: Addon,
         plugin_url: str = '',
-        index_route: str = '',
-        route_param_name: str = 'action',
+        route_param_name: str = 'r',
     ) -> None:
         """
         Arguments:
             plugin_url str the plugin url in plugin:// notation.
         """
-        self.plugin_url = plugin_url or sys.argv[0]
-        self.index_route = index_route
-        self.route_param_name = route_param_name
-        self._routes = {}
-        self._error_handlers = {}
+        self._routes: t.Dict[str, t.Callable[..., None]] = {}
+        self._error_handlers: t.Dict[t.Type[Exception], t.Callable[..., None]] = {}
 
-    def _find_exception_handler(self, err: Exception):
+        self.addon = addon
+        self.route_param_name = route_param_name
+
+        self.plugin_url = plugin_url or self.addon.url
+
+    def _handle_exception(self, err: Exception) -> None:
+        """Handles the exception if possible, or rethrows it."""
         for exc_type in type(err).__mro__:
             if exc_type in self._error_handlers:
-                return self._error_handlers[exc_type]
+                handler = self._error_handlers[exc_type]
+                return handler(err, self)
         return None
 
-    @staticmethod
-    def current_query() -> QueryParams:
-        return QueryParams(sys.argv[2])
+    def dispatch(self, qs: str = '') -> None:
+        """
+        Processes a request for a page.
 
-    @staticmethod
-    def current_url() -> str:
-        return '%s%s' % (sys.argv[0], sys.argv[2])
+        Arguments:
+            qs (str): Query string.
+        :return:
+        """
+        q = QueryParams(qs) if qs else self.addon.query
+        route_name = q.get_string(self.route_param_name, '')
 
-    def dispatch(self, qs: t.Optional[str] = None):
-        q = self.current_query() if qs is None else QueryParams(qs)
-        route_name = q.get_string(self.route_param_name, default=self.index_route)
+        if isinstance(route_name, list):
+            self.addon.logger.error(f'Passed multiple values for {self.route_param_name}.')
+            return None
 
         if route_name not in self._routes:
-            logger.error('Default route not found.')
-        else:
-            func = self._routes[route_name]
-            try:
-                func(q=q)
-            except Exception as err:
-                handler = self._find_exception_handler(err)
-                if handler is None:
-                    raise
-                handler(err, self)
+            self.addon.logger.error('Route not found.')
+            return None
 
-    def register_error_handler(self, exc_type: t.Type[Exception]):
-        def decorator(func):
-            self._error_handlers[exc_type] = func
-            return func
-        return decorator
+        handler = self._routes[route_name]
+        handler_kwargs = {}
+        sig = inspect.signature(handler)
 
-    def route(self, name: str = ''):
-        def decorator(func):
-            self.register_route(name, func)
-            return func
-        return decorator
+        for name, param in sig.parameters.items():
+            default = None if param.default is inspect.Parameter.empty else param.default
 
-    def register_route(self, name: str, handler: t.Callable[..., None]) -> None:
-        self._routes[name or self.index_route] = handler
+            if param.annotation is inspect.Parameter.empty:
+                handler_kwargs[name] = q.get(name, default=default)
+            else:
+                handler_kwargs[name] = q.get(name, default=default, type_cast=param.annotation)
+
+        try:
+            return handler(**handler_kwargs)
+        except Exception as err:
+            return self._handle_exception(err)
+
+    def register_error_handler(self, exc_type: t.Type[Exception], handler: t.Callable[..., None]) -> None:
+        """Adds a handler for the passed exception type."""
+        self._error_handlers[exc_type] = handler
+
+    def register_route(self, handler: t.Callable[..., None], is_root: bool = False) -> None:
+        """
+        Adds a handler for the page.
+
+        Arguments:
+            handler (callable): Handler function.
+            is_root (bool): This is the root page.
+        """
+        name = '%s.%s' % (handler.__module__, handler.__qualname__)
+
+        if name in self._routes:
+            self.addon.logger.debug("Duplicate route name '%s'", name)
+
+        self._routes[name] = handler
+
+        if is_root:
+            self._routes[''] = handler
 
     def url_for(
         self,
         func_or_name: t.Union[str, t.Callable[..., None]],
-        **kwargs,
+        **kwargs: t.Any,
     ) -> str:
         """
         Returns a URL for calling the plugin recursively from the given set of keyword arguments.
@@ -155,7 +281,7 @@ class Router:
             action str
             kwargs dict "argument=value" pairs
         """
-        content_type = self.current_query().get_string('content_type')
+        content_type = self.addon.query.get_string('content_type')
 
         if content_type is not None:
             kwargs['content_type'] = content_type
@@ -174,10 +300,10 @@ class Router:
 
         return '%s?%s' % (self.plugin_url, urlencode(kwargs))
 
-    def url_from_current(self, **kwargs: t.Any) -> str:
-        q = QueryParams(sys.argv[2][1:])
-
-        for name, value in kwargs.items():
-            q.set(name, value)
-
-        return '%s?%s' % (self.plugin_url, urlencode(dict(q)))
+    # def url_from_current(self, **kwargs: t.Any) -> str:
+    #     q = QueryParams(sys.argv[2][1:])
+    #
+    #     for name, value in kwargs.items():
+    #         q.set(name, value)
+    #
+    #     return '%s?%s' % (self.plugin_url, urlencode(dict(q)))
