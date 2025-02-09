@@ -1,7 +1,6 @@
 import sys
 from contextlib import suppress
 import configparser
-import inspect
 import logging
 import json
 import os
@@ -203,13 +202,19 @@ class Router:
 
         self.plugin_url = plugin_url or self.addon.url
 
+    def _get_route_name(self, handler: t.Callable[..., None]) -> str:
+        """Returns the route name from the callable object."""
+        return '%s.%s' % (handler.__module__, handler.__qualname__)
+
     def _handle_exception(self, err: Exception) -> None:
         """Handles the exception if possible, or rethrows it."""
         for exc_type in type(err).__mro__:
             if exc_type in self._error_handlers:
                 handler = self._error_handlers[exc_type]
                 return handler(err, self)
-        return None
+        else:
+            self.addon.logger.error(f'Uncaught exception: {err!r}')
+            raise err
 
     def dispatch(self, qs: str = '') -> None:
         """
@@ -232,15 +237,12 @@ class Router:
 
         handler = self._routes[route_name]
         handler_kwargs = {}
-        sig = inspect.signature(handler)
 
-        for name, param in sig.parameters.items():
-            default = None if param.default is inspect.Parameter.empty else param.default
-
-            if param.annotation is inspect.Parameter.empty:
-                handler_kwargs[name] = q.get(name, default=default)
+        for arg in utils.get_function_arguments(handler):
+            if arg.annotation:
+                handler_kwargs[arg.name] = q.get(arg.name, default=arg.default, type_cast=arg.annotation)
             else:
-                handler_kwargs[name] = q.get(name, default=default, type_cast=param.annotation)
+                handler_kwargs[arg.name] = q.get(arg.name, default=arg.default)
 
         try:
             return handler(**handler_kwargs)
@@ -259,7 +261,7 @@ class Router:
             handler (callable): Handler function.
             is_root (bool): This is the root page.
         """
-        name = '%s.%s' % (handler.__module__, handler.__qualname__)
+        name = self._get_route_name(handler)
 
         if name in self._routes:
             self.addon.logger.debug("Duplicate route name '%s'", name)
@@ -287,12 +289,12 @@ class Router:
             kwargs['content_type'] = content_type
 
         if callable(func_or_name):
-            for name, func in self._routes.items():
-                if func is func_or_name:
-                    kwargs[self.route_param_name] = name
-                    break
-            else:
-                raise RuntimeError('The passed argument func is not a route handler.')
+            name = self._get_route_name(func_or_name)
+
+            if name not in self._routes or self._routes[name] is not func_or_name:
+                raise RuntimeError('The passed argument is not a route handler.')
+
+            kwargs[self.route_param_name] = name
         else:
             if func_or_name not in self._routes:
                 raise RuntimeError('The passed argument is not a route name.')

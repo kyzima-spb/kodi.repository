@@ -1,3 +1,5 @@
+from functools import lru_cache
+import inspect
 import logging
 import os
 import sys
@@ -9,12 +11,38 @@ import xbmcaddon
 
 __all__ = (
     'get_addon',
+    'get_function_arguments',
     'get_logger',
 )
 
 
+class FunctionArgument(t.NamedTuple):
+    name: str
+    required: bool
+    default: t.Any
+    annotation: t.Optional[t.Type[t.Any]]
+
+
 def debug_argument_passed() -> bool:
     return '--debug' in os.environ.get('KODI_EXTRA_ARGS', '')
+
+
+@lru_cache
+def get_function_arguments(func: t.Callable[..., t.Any]) -> t.Sequence[FunctionArgument]:
+    """
+    Returns information about the function arguments:
+    name, whether required, default value, and annotation.
+    """
+    info = []
+    sig = inspect.signature(func)
+
+    for name, param in sig.parameters.items():
+        required = param.default is inspect.Parameter.empty
+        default = inspect.Parameter.empty if required else param.default
+        annotation = None if param.annotation is inspect.Parameter.empty else t.get_args(param.annotation)
+        info.append(FunctionArgument(name, required, default, annotation))
+
+    return info
 
 
 def get_addon(addon_id: t.Optional[str] = None) -> xbmcaddon.Addon:

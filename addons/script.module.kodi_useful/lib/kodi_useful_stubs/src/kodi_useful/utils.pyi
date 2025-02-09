@@ -1,9 +1,21 @@
 import logging
+import typing as t
 import xbmcaddon
 from _typeshed import Incomplete
 
-__all__ = ['get_addon', 'get_logger']
+__all__ = ['get_addon', 'get_function_arguments', 'get_logger']
 
+class FunctionArgument(t.NamedTuple):
+    name: str
+    required: bool
+    default: t.Any
+    annotation: type[t.Any] | None
+
+def get_function_arguments(func: t.Callable[..., t.Any]) -> t.Sequence[FunctionArgument]:
+    """
+    Returns information about the function arguments:
+    name, whether required, default value, and annotation.
+    """
 def get_addon(addon_id: str | None = None) -> xbmcaddon.Addon:
     """
     Returns the plugin object.
