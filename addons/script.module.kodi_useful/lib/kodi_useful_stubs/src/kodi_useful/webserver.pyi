@@ -53,6 +53,11 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
     def render_template(self, name, **kwargs): ...
 
 class HTTPServer:
+    _address: Incomplete
+    _httpd: Incomplete
+    _httpd_thread: Incomplete
+    _url_handlers: Incomplete
+    _handler: Incomplete
     def __init__(self, host: str = 'localhost', port: int = 0, root_dir: PathLike = '') -> None: ...
     def delete(self, path: str):
         """Registers a DELETE request handler for the specified path."""

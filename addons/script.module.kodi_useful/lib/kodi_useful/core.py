@@ -1,9 +1,9 @@
-import sys
-from contextlib import suppress
-import configparser
+import inspect
+from dataclasses import dataclass, field
 import logging
 import json
 import os
+import sys
 import typing as t
 from urllib.parse import parse_qs, urlencode
 
@@ -11,6 +11,10 @@ import xbmc
 from xbmcvfs import translatePath
 
 from . import utils
+from .enums import Scope
+
+if t.TYPE_CHECKING:
+    from .utils import Argument
 
 
 __all__ = (
@@ -23,14 +27,17 @@ __all__ = (
 F = t.TypeVar('F', bound=t.Callable[..., t.Any])
 
 
-def cast_bool(v: str) -> bool:
-    return configparser.ConfigParser.BOOLEAN_STATES.get(v, bool(v))
+@dataclass
+class Route:
+    name: str
+    handler: t.Callable[..., None]
+    _arguments: t.Optional[t.Sequence['Argument']] = field(init=False, default=None)
 
-
-def loads(v: str) -> t.Any:
-    with suppress(json.JSONDecodeError):
-        v = json.loads(v)
-    return v
+    @property
+    def arguments(self) -> t.Sequence['Argument']:
+        if self._arguments is None:
+            self._arguments = utils.get_function_arguments(self.handler)
+        return self._arguments
 
 
 class Addon:
@@ -70,7 +77,7 @@ class Addon:
         self.query = QueryParams(sys.argv[2] if len(sys.argv) > 2 else '')
         self.router = Router(self)
 
-        self.logger.debug(f'URL: {self.url} | HANDLE: {self.handle}')
+        self.logger.debug(f'URL: {self.url} | Query: {self.query.to_dict()} | HANDLE: {self.handle}')
 
     def error_handler(self, exc_type: t.Type[Exception]) -> t.Callable[[F], F]:
         """Adds a handler for the passed exception type."""
@@ -84,14 +91,41 @@ class Addon:
         return os.path.join(self.addon_data_dir, name, *paths)
 
     @classmethod
-    def get_instance(cls, addon_id: t.Optional[str] = None) -> t.Optional['Addon']:
-        return cls._instances.get(str(addon_id))
+    def get_instance(cls, addon_id: t.Optional[str] = None) -> 'Addon':
+        addon_id = str(addon_id)
+
+        if addon_id not in cls._instances:
+            raise ValueError(f'Addon with {addon_id!r} not found.')
+
+        return cls._instances[addon_id]
 
     def get_path(self, name: str, *paths: str) -> str:
         """Returns the path to the plugin files."""
         return os.path.join(self.addon_dir, name, *paths)
 
-    def localize(self, string_id: t.Union[str, int], fallback: str = '') -> str:
+    def get_setting(self, id_: str, type_: str = 'str') -> t.Any:
+        """
+        Returns the value of a setting as a passed type.
+
+        Arguments:
+            id_ (str): id of the setting.
+            type_ (str): type of the setting.
+        """
+        getters_map = {
+            'bool': self.addon.getSettingBool,
+            'float': self.addon.getSettingNumber,
+            'int': self.addon.getSettingInt,
+            'str': self.addon.getSetting,
+        }
+        return getters_map[type_](id_)
+
+    def localize(
+        self,
+        string_id: t.Union[str, int],
+        *args: t.Any,
+        fallback: str = '',
+        **kwargs: t.Any,
+    ) -> str:
         """Returns the translation for the passed identifier."""
         if not fallback:
             fallback = str(string_id)
@@ -100,15 +134,22 @@ class Addon:
             string_id = self.locale_map.get(string_id, -1)
 
         if string_id < 0:
-            return fallback
+            result = fallback
+        else:
+            source = self.addon if 30000 <= string_id < 31000 else xbmc
+            result = source.getLocalizedString(string_id) or fallback
 
-        source = self.addon if 30000 <= string_id < 31000 else xbmc
-        result = source.getLocalizedString(string_id)
+        if args:
+            return result % args
 
-        return result if result else fallback
+        if kwargs:
+            return result % kwargs
 
+        return result
+
+    @classmethod
     def route(
-        self,
+        cls,
         func_or_none: t.Optional[F] = None,
         is_root: bool = False,
     ) -> t.Callable[[F], F]:
@@ -120,7 +161,8 @@ class Addon:
             is_root (bool): This is the root page.
         """
         def decorator(func: F) -> F:
-            self.router.register_route(func, is_root=is_root)
+            current_addon = cls.get_instance() if isinstance(cls, type) else cls
+            current_addon.router.register_route(func, is_root=is_root)
             return func
 
         if func_or_none is not None:
@@ -128,59 +170,92 @@ class Addon:
 
         return decorator
 
+    @classmethod
+    def url_for(
+        cls,
+        func_or_name: t.Union[str, t.Callable[..., None]],
+        **kwargs: t.Any,
+    ) -> str:
+        """
+        Returns a URL for calling the plugin recursively from the given set of keyword arguments.
+
+        Arguments:
+            func_or_name (str|Callable): A reference to the handler function or a string to import it.
+            kwargs (dict): Query string parameters.
+        """
+        current_addon = cls.get_instance() if isinstance(cls, type) else cls
+        return current_addon.router.url_for(func_or_name, **kwargs)
+
+
+T = t.TypeVar('T')
+
 
 class QueryParams:
     def __init__(self, query_string: str) -> None:
         query_string = query_string.strip('?')
-        self._params = {
-            k: v if len(v) > 1 else v[0]
-            for k, v in parse_qs(query_string, keep_blank_values=True).items()
-        }
+        self._params = parse_qs(query_string, keep_blank_values=True)
 
-    def __iter__(self) -> t.Iterator[t.Tuple[str, t.Union[str, t.List[str]]]]:
-        return iter(self._params.items())
+    # @t.overload
+    # def get(self, name: str) -> t.Optional[t.Any]: ...
+    #
+    # @t.overload
+    # def get(self, name: str, default: T) -> t.Optional[T]: ...
+
+    # @t.overload
+    # def get(self, name: str, default: t.Any) -> t.Any: ...
 
     def get(
         self,
         name: str,
-        default: t.Optional[t.Union[t.Any, t.List[t.Any]]] = None,
-        type_cast: t.Callable[[str], t.Any] = loads,
-    ) -> t.Optional[t.Union[t.Any, t.List[t.Any]]]:
-        value = self.get_string(name)
+        required: bool = False,
+        default: t.Optional[t.Any] = None,
+        type_cast: t.Optional[t.Callable[[str], t.Any]] = None,
+    ) -> t.Optional[t.Any]:
+        value = self.get_list(name, required=required, type_cast=type_cast)
+        return value[-1] if len(value) > 0 else default
 
-        if value is None:
+    def get_bool(self, name: str, default: t.Optional[bool] = None) -> t.Optional[bool]:
+        return self.get(name, default=default, type_cast=utils.cast_bool)
+
+    @t.overload
+    def get_int(self, name: str) -> t.Optional[int]: ...
+
+    @t.overload
+    def get_int(self, name: str, default: None) -> t.Optional[int]: ...
+
+    @t.overload
+    def get_int(self, name: str, default: int) -> int: ...
+
+    def get_int(self, name: str, default: t.Optional[int] = None) -> t.Optional[int]:
+        return self.get(name, default=default, type_cast=int)
+
+    def get_int_list(self, name: str, default: t.Optional[t.List[int]] = None) -> t.Optional[t.List[int]]:
+        return self.get_list(name, default=default, type_cast=int)
+
+    def get_list(
+        self,
+        name: str,
+        required: bool = False,
+        default: t.Optional[t.List[t.Any]] = None,
+        type_cast: t.Optional[t.Callable[[str], t.Any]] = None,
+    ) -> t.List[t.Any]:
+        if name not in self._params:
+            if required:
+                raise ValueError(f'The {name!r} parameter is missing in the query string.')
+
+            if default is None:
+                default = []
+
             return default
 
-        if isinstance(value, list):
-            value = [type_cast(i) for i in value]
-        else:
-            value = type_cast(value)
+        if type_cast is None:
+            return self._params[name]
 
-        return value
+        return [type_cast(i) for i in self._params[name]]
 
-    def get_bool(
-        self,
-        name: str,
-        default: t.Optional[t.Union[bool, t.List[bool]]] = None,
-    ) -> t.Optional[t.Union[bool, t.List[bool]]]:
-        return self.get(name, default, type_cast=cast_bool)
-
-    def get_int(
-        self,
-        name: str,
-        default: t.Optional[t.Union[int, t.List[int]]] = None,
-    ) -> t.Optional[t.Union[int, t.List[int]]]:
-        return self.get(name, default, type_cast=int)
-
-    def get_string(
-        self,
-        name: str,
-        default: t.Optional[t.Union[str, t.List[str]]] = None,
-    ) -> t.Optional[t.Union[str, t.List[str]]]:
-        return self._params.get(name, default)
-
-    def set(self, name: str, value: t.Any) -> None:
-        self._params[name] = value
+    def to_dict(self) -> t.Dict[str, t.Union[str, t.List[str]]]:
+        """Returns the query string parameters as a dictionary."""
+        return {k: v[0] if len(v) == 1 else v for k, v in self._params.items()}
 
 
 class Router:
@@ -192,9 +267,9 @@ class Router:
     ) -> None:
         """
         Arguments:
-            plugin_url str the plugin url in plugin:// notation.
+            plugin_url (str): The plugin url in plugin:// notation.
         """
-        self._routes: t.Dict[str, t.Callable[..., None]] = {}
+        self._routes: t.Dict[str, Route] = {}
         self._error_handlers: t.Dict[t.Type[Exception], t.Callable[..., None]] = {}
 
         self.addon = addon
@@ -225,35 +300,64 @@ class Router:
         :return:
         """
         q = QueryParams(qs) if qs else self.addon.query
-        route_name = q.get_string(self.route_param_name, '')
-
-        if isinstance(route_name, list):
-            self.addon.logger.error(f'Passed multiple values for {self.route_param_name}.')
-            return None
-
-        if route_name not in self._routes:
-            self.addon.logger.error('Route not found.')
-            return None
-
-        handler = self._routes[route_name]
+        route_name = q.get(self.route_param_name, default='')
+        route = self.find_route(route_name)
         handler_kwargs = {}
 
-        for arg in utils.get_function_arguments(handler):
-            if arg.annotation:
-                handler_kwargs[arg.name] = q.get(arg.name, default=arg.default, type_cast=arg.annotation)
-            else:
-                handler_kwargs[arg.name] = q.get(arg.name, default=arg.default)
+        self.addon.logger.debug(route.arguments)
+
+        for arg in route.arguments:
+            if arg.type_cast is not None and issubclass(arg.type_cast, Addon):
+                handler_kwargs[arg.name] = self.addon
+            elif arg.metadata.scope != Scope.NOTSET:
+                name = arg.metadata.name or arg.name
+                scope = arg.metadata.scope
+
+                if scope == Scope.QUERY:
+                    handler_kwargs[arg.name] = q.get(
+                        name,
+                        required=arg.required,
+                        default=arg.default_value,
+                        type_cast=arg.type_cast,
+                    )
+                elif scope == Scope.SETTINGS:
+                    handler_kwargs[arg.name] = self.addon.get_setting(name, arg.type_cast.__name__)
 
         try:
-            return handler(**handler_kwargs)
+            return route.handler(**handler_kwargs)
         except Exception as err:
             return self._handle_exception(err)
+
+    def find_route(self, func_or_name: t.Union[str, t.Callable[..., None]]) -> Route:
+        """
+        Returns the route object for the passed handler.
+
+        Arguments:
+            func_or_name (str|Callable): A reference to the handler function or a string to import it.
+        """
+        if callable(func_or_name):
+            name = self._get_route_name(func_or_name)
+            route = self._routes.get(name)
+
+            if route is None or route.handler is not func_or_name:
+                raise RuntimeError('The passed argument is not a route handler.')
+
+            return route
+
+        if func_or_name not in self._routes:
+            raise RuntimeError(f'The passed argument {func_or_name!r} is not a route name.')
+
+        return self._routes[func_or_name]
 
     def register_error_handler(self, exc_type: t.Type[Exception], handler: t.Callable[..., None]) -> None:
         """Adds a handler for the passed exception type."""
         self._error_handlers[exc_type] = handler
 
-    def register_route(self, handler: t.Callable[..., None], is_root: bool = False) -> None:
+    def register_route(
+        self,
+        handler: t.Callable[..., None],
+        is_root: bool = False,
+    ) -> None:
         """
         Adds a handler for the page.
 
@@ -266,10 +370,10 @@ class Router:
         if name in self._routes:
             self.addon.logger.debug("Duplicate route name '%s'", name)
 
-        self._routes[name] = handler
+        self._routes[name] = Route(name=name, handler=handler)
 
         if is_root:
-            self._routes[''] = handler
+            self._routes[''] = self._routes[name]
 
     def url_for(
         self,
@@ -277,35 +381,23 @@ class Router:
         **kwargs: t.Any,
     ) -> str:
         """
-        Returns a URL for calling the plugin recursively from the given set of keyword arguments.
+        Returns a URL for calling the plugin from the given set of keyword arguments.
 
         Arguments:
-            action str
-            kwargs dict "argument=value" pairs
+            func_or_name (str|Callable): A reference to the handler function or a string to import it.
+            kwargs (dict): Query string parameters.
         """
-        content_type = self.addon.query.get_string('content_type')
+        if not kwargs.get('content_type'):
+            content_type = self.addon.query.get('content_type')
 
-        if content_type is not None:
-            kwargs['content_type'] = content_type
+            if content_type is not None:
+                kwargs['content_type'] = content_type
 
-        if callable(func_or_name):
-            name = self._get_route_name(func_or_name)
+        route = self.find_route(func_or_name)
+        kwargs[self.route_param_name] = route.name
 
-            if name not in self._routes or self._routes[name] is not func_or_name:
-                raise RuntimeError('The passed argument is not a route handler.')
-
-            kwargs[self.route_param_name] = name
-        else:
-            if func_or_name not in self._routes:
-                raise RuntimeError('The passed argument is not a route name.')
-            kwargs[self.route_param_name] = func_or_name
+        for arg in route.arguments:
+            if arg.metadata.scope == Scope.QUERY and arg.required and arg.name not in kwargs:
+                raise ValueError(f'Missing value for required parameter {arg.name!r} in query string.')
 
         return '%s?%s' % (self.plugin_url, urlencode(kwargs))
-
-    # def url_from_current(self, **kwargs: t.Any) -> str:
-    #     q = QueryParams(sys.argv[2][1:])
-    #
-    #     for name, value in kwargs.items():
-    #         q.set(name, value)
-    #
-    #     return '%s?%s' % (self.plugin_url, urlencode(dict(q)))

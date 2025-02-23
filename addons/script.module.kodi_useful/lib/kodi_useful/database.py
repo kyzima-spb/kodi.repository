@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, fields
 import datetime
-from functools import lru_cache, partial
+from functools import cached_property, lru_cache, partial
 import logging
 import sqlite3
 import re
@@ -249,8 +249,17 @@ class Model:
         return {name: getattr(self, name) for name in self.get_table_columns()}
 
     def delete(self) -> None:
+        id_ = self.get_id()
+
+        if isinstance(id_, dict):
+            params = id_
+        else:
+            if not isinstance(id_, (tuple, list)):
+                id_ = (id_,)
+            params = {name: value for name, value in zip(self.get_primary_key(), id_)}
+
         with self.get_connection() as connection:
-            connection.execute(self.get_builder().delete())
+            connection.execute(self.get_builder().delete(), **params)
 
     @classmethod
     def find(cls, id_: PrimaryKey) -> t.Optional[Model]:
