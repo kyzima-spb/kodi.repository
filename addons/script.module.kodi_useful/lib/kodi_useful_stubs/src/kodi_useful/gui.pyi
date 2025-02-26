@@ -45,7 +45,7 @@ def prompt(msg: str, required: bool = False, default: t.Any | None = None, type_
 
 class Directory:
     content_type_map: Incomplete
-    addon: Incomplete
+    _addon: Incomplete
     cache_to_disk: Incomplete
     content: Incomplete
     content_type: Incomplete
@@ -53,6 +53,8 @@ class Directory:
     _title: Incomplete
     _ltitle: Incomplete
     def __init__(self, addon: Addon | None = None, cache_to_disk: bool = True, content: Content = ..., content_type: str | None = None, sort_methods: t.Sequence[int | tuple[int, str, str]] = (), title: str = '', ltitle: int | str = '') -> None: ...
+    @property
+    def addon(self) -> Addon: ...
     @cached_property
     def title(self) -> str: ...
     def __call__(self, func: _F) -> _F: ...

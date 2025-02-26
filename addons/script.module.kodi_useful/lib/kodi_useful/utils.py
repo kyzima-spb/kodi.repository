@@ -1,8 +1,5 @@
 import configparser
 from contextlib import suppress
-from dataclasses import dataclass, InitVar, field
-from functools import lru_cache
-import inspect
 import logging
 import json
 import os
@@ -12,64 +9,13 @@ import typing as t
 import xbmc
 import xbmcaddon
 
-from .enums import Scope
-
 
 __all__ = (
     'auto_cast',
     'cast_bool',
     'get_addon',
-    'get_function_arguments',
     'get_logger',
-    'Argument',
 )
-
-
-class ArgumentMetadata(t.NamedTuple):
-    scope: Scope = Scope.NOTSET
-    name: str = ''
-
-
-@dataclass
-class Argument:
-    name: str
-    default: t.Any
-    annotation: InitVar[t.Any]
-    metadata: ArgumentMetadata = field(
-        init=False,
-        default_factory=lambda: ArgumentMetadata(),
-    )
-    type_cast: t.Optional[t.Callable[[str], t.Any]] = field(default=None, init=False)
-
-    def __post_init__(self, annotation: t.Any):
-        if annotation is not inspect.Parameter.empty:
-            if hasattr(annotation, '__metadata__'):
-                annotation, *metadata = t.get_args(annotation)
-                self.metadata = ArgumentMetadata(*metadata)
-
-            origin = t.get_origin(annotation)
-
-            if not origin:
-                self.type_cast = annotation
-
-            if origin is t.Union:
-                variants = {i for i in t.get_args(annotation) if not isinstance(None, i)}
-
-                if len(variants) == 1:
-                    self.type_cast = variants.pop()
-
-            # from kodi_useful import Addon
-            # Addon.get_instance().logger.debug(f'{self.name} {self.metadata}')
-
-    @property
-    def default_value(self) -> t.Any:
-        if self.default is inspect.Parameter.empty:
-            return None
-        return self.default
-
-    @property
-    def required(self) -> bool:
-        return self.default is inspect.Parameter.empty
 
 
 def auto_cast(v: str) -> t.Any:
@@ -88,20 +34,6 @@ def debug_argument_passed() -> bool:
     return '--debug' in os.environ.get('KODI_EXTRA_ARGS', '')
 
 
-@lru_cache
-def get_function_arguments(func: t.Callable[..., t.Any]) -> t.Sequence[Argument]:
-    """
-    Returns information about the function arguments:
-    name, whether required, default value, and annotation.
-    """
-    sig = inspect.signature(func)
-    real_types = t.get_type_hints(func, include_extras=True)
-    return [
-        Argument(name=name, default=param.default, annotation=real_types.get(name, param.annotation))
-        for name, param in sig.parameters.items()
-    ]
-
-
 def get_addon(addon_id: t.Optional[str] = None) -> xbmcaddon.Addon:
     """
     Returns the plugin object.
@@ -114,10 +46,6 @@ def get_addon(addon_id: t.Optional[str] = None) -> xbmcaddon.Addon:
     if addon_id is not None:
         return xbmcaddon.Addon(addon_id)
     return xbmcaddon.Addon()
-
-
-def get_settings(addon_id: t.Optional[str] = None) -> xbmcaddon.Settings:
-    return get_addon(addon_id).getSettings()
 
 
 def get_logger(

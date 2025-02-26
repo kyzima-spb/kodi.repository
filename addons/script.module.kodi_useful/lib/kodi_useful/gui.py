@@ -58,7 +58,7 @@ def create_next_element(
     current_addon = Addon.get_instance()
 
     if items_per_page is None:
-        items_per_page = current_addon.get_setting(limit_name, 'int')
+        items_per_page = current_addon.get_setting(limit_name, int)
 
     if offset is None:
         offset = current_addon.query.get_int(offset_name, items_per_page)
@@ -146,7 +146,7 @@ class Directory:
         title: str = '',
         ltitle: t.Union[int, str] = '',
     ) -> None:
-        self.addon = addon or Addon.get_instance()
+        self._addon = addon
         # self.cache_to_disk = False if self.addon.debug else cache_to_disk
         self.cache_to_disk = cache_to_disk
 
@@ -156,6 +156,10 @@ class Directory:
 
         self._title = title
         self._ltitle = ltitle
+
+    @property
+    def addon(self) -> Addon:
+        return self._addon or Addon.get_instance()
 
     @cached_property
     def title(self) -> str:
