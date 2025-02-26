@@ -147,8 +147,7 @@ class Directory:
         ltitle: t.Union[int, str] = '',
     ) -> None:
         self._addon = addon
-        # self.cache_to_disk = False if self.addon.debug else cache_to_disk
-        self.cache_to_disk = cache_to_disk
+        self._cache_to_disk = cache_to_disk
 
         self.content = content
         self.content_type = content_type or self.content_type_map.get(content, '')
@@ -160,6 +159,10 @@ class Directory:
     @property
     def addon(self) -> Addon:
         return self._addon or Addon.get_instance()
+
+    @property
+    def cache_to_disk(self) -> bool:
+        return False if self.addon.debug else self._cache_to_disk
 
     @cached_property
     def title(self) -> str:
