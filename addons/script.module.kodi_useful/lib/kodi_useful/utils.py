@@ -3,6 +3,7 @@ from contextlib import suppress
 import logging
 import json
 import os
+import re
 import sys
 import typing as t
 
@@ -15,6 +16,7 @@ __all__ = (
     'cast_bool',
     'get_addon',
     'get_logger',
+    'get_screen_resolution',
 )
 
 
@@ -71,6 +73,14 @@ def get_logger(
     logger.addFilter(ImportNameFilter())
 
     return logger
+
+
+def get_screen_resolution() -> t.Tuple[int, int]:
+    """Returns the screen resolution set in the settings."""
+    resolution = xbmc.getInfoLabel('System.ScreenResolution')
+    found = re.findall(r'\d+', resolution)
+    width, height = (int(i) for i in found[:2])
+    return width, height
 
 
 class ImportNameFilter(logging.Filter):
