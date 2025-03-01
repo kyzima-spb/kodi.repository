@@ -3,7 +3,7 @@ import typing as t
 import xbmcaddon
 from _typeshed import Incomplete
 
-__all__ = ['auto_cast', 'cast_bool', 'get_addon', 'get_logger']
+__all__ = ['auto_cast', 'cast_bool', 'get_addon', 'get_logger', 'get_screen_resolution']
 
 def auto_cast(v: str) -> t.Any:
     """Attempts to cast a string value to a known JSON type, otherwise returns the original string."""
@@ -26,6 +26,8 @@ def get_logger(addon_id: str | None = None, level: int = ...) -> logging.Logger:
         addon_id (str): Kodi plugin name.
         level (str): The level of messages displayed in the log.
     """
+def get_screen_resolution() -> tuple[int, int]:
+    """Returns the screen resolution set in the settings."""
 
 class ImportNameFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool: ...
