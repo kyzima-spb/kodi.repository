@@ -20,43 +20,13 @@ PrimaryKey = Union[Any, Tuple[Any, ...], Dict[str, Any]]
 
 logger = logging.getLogger(__name__)
 
+sqlite3.register_adapter(datetime.date, lambda v: v.isoformat())
+sqlite3.register_adapter(datetime.datetime, lambda v: v.isoformat())
+# sqlite3.register_adapter(datetime, lambda v: int(v.timestamp()))
 
-# def adapt_date_iso(val):
-#     """Adapt datetime.date to ISO 8601 date."""
-#     return val.isoformat()
-#
-# def adapt_datetime_iso(val):
-#     """Adapt datetime.datetime to timezone-naive ISO 8601 date."""
-#     return val.isoformat()
-#
-# def adapt_datetime_epoch(val):
-#     """Adapt datetime.datetime to Unix timestamp."""
-#     return int(val.timestamp())
-#
-#
-# sqlite3.register_adapter(datetime.date, adapt_date_iso)
-# sqlite3.register_adapter(datetime.datetime, adapt_datetime_iso)
-# sqlite3.register_adapter(datetime.datetime, adapt_datetime_epoch)
-
-
-def convert_date(value: bytes) -> datetime.date:
-    """Convert ISO 8601 date to datetime.date object."""
-    return datetime.date.fromisoformat(value.decode())
-
-
-def convert_datetime(value: bytes) -> datetime.datetime:
-    """Convert ISO 8601 datetime to datetime.datetime object."""
-    return datetime.datetime.fromisoformat(value.decode())
-
-
-def convert_timestamp(value: bytes) -> datetime.datetime:
-    """Convert Unix epoch timestamp to datetime.datetime object."""
-    return datetime.datetime.fromtimestamp(int(value))
-
-
-sqlite3.register_converter('date', convert_date)
-sqlite3.register_converter('datetime', convert_datetime)
-sqlite3.register_converter('timestamp', convert_timestamp)
+sqlite3.register_converter('date', lambda v: datetime.date.fromisoformat(v.decode()))
+sqlite3.register_converter('datetime', lambda v: datetime.datetime.fromisoformat(v.decode()))
+sqlite3.register_converter('timestamp', lambda v: datetime.datetime.fromtimestamp(int(v)))
 
 
 def model_row_factory(
