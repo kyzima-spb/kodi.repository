@@ -49,8 +49,9 @@ services:
 #      - ./addons/plugin.video.uplayer:/home/user/.kodi/addons/plugin.video.uplayer
 #      - ./addons/script.module.yt.dlp:/home/user/.kodi/addons/script.module.yt.dlp
       - ./addons/script.module.kodi_useful:/kodi/addons/script.module.kodi_useful
-      - ./addons/script.module.yt-dlp:/kodi/addons/script.module.yt-dlp
 #      - ./addons/script.module.vk_api:/kodi/addons/script.module.vk_api
+      - ./addons/script.module.yt-dlp:/kodi/addons/script.module.yt-dlp
+      - ./addons/plugin.video.demo:/kodi/addons/plugin.video.demo
     depends_on:
       - nginx
 
