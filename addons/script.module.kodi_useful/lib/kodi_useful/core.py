@@ -12,6 +12,7 @@ from .routing import router, QueryParams
 
 
 __all__ = (
+    'current_addon',
     'Addon',
 )
 
@@ -158,3 +159,6 @@ class Addon:
                 kwargs['content_type'] = content_type
 
         return self.router.url_for(func_or_name, base_url=self.url, **kwargs)
+
+
+current_addon = Addon()

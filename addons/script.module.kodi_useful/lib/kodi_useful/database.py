@@ -1,19 +1,16 @@
-from __future__ import annotations
-
+import atexit
 from dataclasses import dataclass, fields
 import datetime
-from functools import cached_property, lru_cache, partial
+from functools import lru_cache, partial
 import logging
 import sqlite3
 import re
+from types import TracebackType
 import typing as t
 from typing import Any, Dict, Tuple, Union
 
-if t.TYPE_CHECKING:
-    from types import TracebackType
 
-
-__all__ = ('select', 'Connection', 'Model', 'SQLStatement')
+__all__ = ('select', 'Connection', 'Model')
 
 
 PrimaryKey = Union[Any, Tuple[Any, ...], Dict[str, Any]]
@@ -22,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 sqlite3.register_adapter(datetime.date, lambda v: v.isoformat())
 sqlite3.register_adapter(datetime.datetime, lambda v: v.isoformat())
-# sqlite3.register_adapter(datetime, lambda v: int(v.timestamp()))
 
 sqlite3.register_converter('date', lambda v: datetime.date.fromisoformat(v.decode()))
 sqlite3.register_converter('datetime', lambda v: datetime.datetime.fromisoformat(v.decode()))
@@ -32,8 +28,8 @@ sqlite3.register_converter('timestamp', lambda v: datetime.datetime.fromtimestam
 def model_row_factory(
     cursor: sqlite3.Cursor,
     row: t.Tuple[t.Any, ...],
-    model_class: t.Type[Model],
-) -> Model:
+    model_class: t.Type['Model'],
+) -> 'Model':
     columns = [column[0] for column in cursor.description]
     return model_class(**{
         key: value
@@ -41,14 +37,37 @@ def model_row_factory(
     })
 
 
-def select(model_class: t.Type[Model]) -> SelectStatement:
+def select(model_class: t.Type['Model']) -> 'SelectStatement':
     table_name = model_class.get_table_name()
     columns = model_class.get_table_columns()
     columns_clause = ', '.join(columns)
     return SelectStatement(
-        query=f'SELECT {columns_clause} FROM {table_name}',
+        f'SELECT {columns_clause} FROM {table_name}',
         model_class=model_class,
     )
+
+
+@dataclass(frozen=True)
+class QueryResult:
+    cursor: sqlite3.Cursor
+    row_factory: t.Optional[t.Callable] = None
+
+    def __iter__(self) -> t.Iterator[t.Any]:
+        for row in self.cursor:
+            yield self.row_factory(self.cursor, row) if callable(self.row_factory) else row
+
+    def fetchall(self) -> t.Sequence[t.Any]:
+        return list(self)
+
+    def fetchone(self) -> t.Optional[t.Any]:
+        return next(iter(self), None)
+
+    def scalar(self) -> t.Optional[t.Any]:
+        row = self.fetchone()
+        return row[0] if row else None
+
+    def scalars(self) -> t.Sequence[t.Any]:
+        return [row[0] for row in self]
 
 
 class Connection:
@@ -56,7 +75,7 @@ class Connection:
         self._filename = filename
         self._conn: t.Optional[sqlite3.Connection] = None
 
-    def __enter__(self) -> Connection:
+    def __enter__(self) -> 'Connection':
         return self
 
     def __exit__(
@@ -68,10 +87,16 @@ class Connection:
         self.commit() if err_type is None else self.rollback()
 
     def _get_connection(self) -> sqlite3.Connection:
+        def close_connection():
+            # if self.echo:
+            #     logger.debug('Closing SQLite connection: %s', conn)
+            self._conn.close()
+
         if self._conn is None:
             self._conn = sqlite3.connect(self._filename, detect_types=sqlite3.PARSE_DECLTYPES)
-            self._conn.row_factory = sqlite3.Row
             self._conn.set_trace_callback(logger.debug)
+            self._conn.execute('PRAGMA foreign_keys = ON')
+            atexit.register(close_connection)
         return self._conn
 
     def close(self) -> None:
@@ -85,116 +110,90 @@ class Connection:
 
     def execute(
         self,
-        stmt: SQLStatement,
+        stmt: t.Union[str, 'SelectStatement'],
+        parameters: t.Union[t.Sequence[t.Any], t.Dict[str, t.Any]] = (),
         **payload: t.Any,
-    ) -> sqlite3.Cursor:
-        stmt_placeholders = set(stmt.placeholders)
-        passed_placeholders = set(payload.keys())
+    ) -> QueryResult:
+        if parameters and payload:
+            raise ValueError('You can use either parameters or named arguments, but not both.')
 
-        missing_placeholders = stmt_placeholders - passed_placeholders
+        if payload:
+            parameters = payload
 
-        if missing_placeholders:
-            raise ValueError('Missing values for parameters: %s' % ', '.join(missing_placeholders))
+        return QueryResult(
+            cursor=self._get_connection().execute(str(stmt), parameters),
+        )
 
-        unknown_placeholders = passed_placeholders - stmt_placeholders
-
-        if unknown_placeholders:
-            raise ValueError('Unknown parameters passed: %s' % ', '.join(unknown_placeholders))
-
-        data = tuple(payload[name] for name in stmt.placeholders)
-
-        return self._get_connection().execute(str(stmt), data)
-
-    def executescript(self, sql_script: str) -> sqlite3.Cursor:
-        return self._get_connection().executescript(sql_script)
+    def executescript(self, sql_script: str, raw: bool = False) -> None:
+        if raw:
+            self._get_connection().executescript(sql_script)
+        else:
+            for stmt in sql_script.split(';'):
+                self._get_connection().execute(stmt)
 
     def query(
         self,
-        stmt: SelectStatement,
-        model_class: t.Optional[t.Type[Model]] = None,
+        stmt: t.Union[str, 'SelectStatement'],
+        parameters: t.Union[t.Sequence[t.Any], t.Dict[str, t.Any]] = (),
+        row_factory: t.Optional[t.Union[t.Callable, t.Type['Model']]] = sqlite3.Row,
         **payload: t.Any,
-    ) -> sqlite3.Cursor:
-        cursor = self.execute(stmt, **payload)
+    ) -> QueryResult:
+        if parameters and payload:
+            raise ValueError('You can use either parameters or named arguments, but not both.')
 
-        if model_class is None:
-            model_class = stmt.model_class
+        if isinstance(stmt, SelectStatement) and stmt.model_class:
+            row_factory = partial(model_row_factory, model_class=stmt.model_class)
 
-        if model_class is not None:
-            cursor.row_factory = partial(model_row_factory, model_class=model_class)
-
-        return cursor
+        return QueryResult(
+            cursor=self._get_connection().execute(str(stmt), parameters),
+            row_factory=row_factory
+        )
 
     def rollback(self) -> None:
         if self._conn is not None:
             self._conn.rollback()
 
 
-class SQLStatement:
-    def __init__(self, query: str) -> None:
-        self.query = query
-
-    def __repr__(self) -> str:
-        return f'{type(self)}({self.query!r})'
+@dataclass(frozen=True)
+class SelectStatement:
+    query: str
+    model_class: t.Optional[t.Type['Model']] = None
 
     def __str__(self) -> str:
         return self.query
 
-    def __add__(self, other: str) -> SQLStatement:
+    def __add__(self, other: str) -> 'SelectStatement':
         if not isinstance(other, str):
             return NotImplemented
-        return self.__class__('%s %s' % (self.query, other))
+        return type(self)(query=other, model_class=self.model_class)
 
-    @property
-    @lru_cache
-    def placeholders(self) -> t.Sequence[str]:
-        clean_query = re.sub(r'(["\']).*?\1', '', self.query)
-        return re.findall(r':(\w+)', clean_query)
-
-
-class SelectStatement(SQLStatement):
-    def __init__(
-        self,
-        query: str,
-        model_class: t.Optional[t.Type[Model]] = None,
-    ) -> None:
-        super().__init__(query)
-        self.model_class = model_class
-
-    def __add__(self, other: str) -> SelectStatement:
-        if not isinstance(other, str):
-            return NotImplemented
-        return self.__class__(
-            query='%s %s' % (self.query, other),
-            model_class=self.model_class,
-        )
-
-    def limit(self, value: int) -> SelectStatement:
+    def limit(self, value: int) -> 'SelectStatement':
         return self + 'LIMIT %d' % value
 
-    def offset(self, value: int) -> SelectStatement:
+    def offset(self, value: int) -> 'SelectStatement':
         return self + 'OFFSET %d' % value
 
-    def order_by(self, name: str, desc: bool = False) -> SelectStatement:
+    def order_by(self, name: str, desc: bool = False) -> 'SelectStatement':
         direction = 'DESC' if desc else 'ASC'
         return self + ('ORDER BY %s %s' % (name, direction))
 
 
 class SQLQueryBuilder:
-    def __init__(self, model_class: t.Type[Model]) -> None:
+    def __init__(self, model_class: t.Type['Model']) -> None:
         self._model_class = model_class
 
     def _where_pk(self) -> str:
         return ' AND '.join('{0} = :{0}'.format(name) for name in self._model_class.get_primary_key())
 
-    def delete(self) -> SQLStatement:
-        return SQLStatement(f'DELETE FROM {self._model_class.get_table_name()} WHERE {self._where_pk()}')
+    def delete(self) -> str:
+        return f'DELETE FROM {self._model_class.get_table_name()} WHERE {self._where_pk()}'
 
-    def insert(self) -> SQLStatement:
+    def insert(self) -> str:
         table_name = self._model_class.get_table_name()
         columns = self._model_class.get_table_columns()
         columns_clause = ', '.join(columns)
         placeholders = ', '.join(':{}'.format(name) for name in columns)
-        return SQLStatement(f'INSERT INTO {table_name} ({columns_clause}) VALUES ({placeholders})')
+        return f'INSERT INTO {table_name} ({columns_clause}) VALUES ({placeholders})'
 
     def select(self) -> SelectStatement:
         return select(self._model_class)
@@ -202,12 +201,12 @@ class SQLQueryBuilder:
     def select_by_pk(self) -> SelectStatement:
         return self.select() + f'WHERE {self._where_pk()}'
 
-    def update(self) -> SQLStatement:
+    def update(self) -> str:
         table_name = self._model_class.get_table_name()
         primary_key = self._model_class.get_primary_key()
         columns = set(self._model_class.get_table_columns()) - set(primary_key)
         set_clause = ', '.join('{0} = :{0}'.format(name) for name in columns)
-        return SQLStatement(f'UPDATE {table_name} SET {set_clause} WHERE {self._where_pk()}')
+        return f'UPDATE {table_name} SET {set_clause} WHERE {self._where_pk()}'
 
 
 @dataclass
@@ -232,7 +231,7 @@ class Model:
             connection.execute(self.get_builder().delete(), **params)
 
     @classmethod
-    def find(cls, id_: PrimaryKey) -> t.Optional[Model]:
+    def find(cls, id_: PrimaryKey) -> t.Optional['Model']:
         if isinstance(id_, dict):
             params = id_
         else:
@@ -296,9 +295,9 @@ class Model:
 
         if not is_empty_id:
             with self.get_connection() as connection:
-                cursor = connection.execute(self.get_builder().update(), **self.as_dict())
+                result = connection.execute(self.get_builder().update(), **self.as_dict())
 
-                if cursor.rowcount > 0:
+                if result.cursor.rowcount > 0:
                     return None
 
         is_composite_pk = len(self.get_primary_key()) > 1
@@ -307,10 +306,10 @@ class Model:
             raise ValueError('You must specify a value for the primary key.')
 
         with self.get_connection() as connection:
-            cursor = connection.execute(self.get_builder().insert(), **self.as_dict())
+            result = connection.execute(self.get_builder().insert(), **self.as_dict())
 
             if is_empty_id and self.is_autoincrement_pk():
-                self.set_id(cursor.lastrowid)
+                self.set_id(result.cursor.lastrowid)
 
     def set_id(self, id_: PrimaryKey) -> None:
         if isinstance(id_, dict):

@@ -2,7 +2,7 @@ import typing as t
 from .routing import QueryParams
 from _typeshed import Incomplete
 
-__all__ = ['Addon']
+__all__ = ['current_addon', 'Addon']
 
 F = t.TypeVar('F', bound=t.Callable[..., t.Any])
 
@@ -48,3 +48,5 @@ class Addon:
             func_or_name (str|Callable): A reference to the handler function or a string to import it.
             kwargs (dict): Query string parameters.
         """
+
+current_addon: Incomplete
