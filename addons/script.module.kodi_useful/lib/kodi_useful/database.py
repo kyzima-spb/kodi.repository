@@ -1,13 +1,16 @@
 import atexit
+from contextlib import contextmanager
 from dataclasses import dataclass, fields
 import datetime
-from functools import lru_cache, partial
+from functools import cached_property, lru_cache, partial, wraps
 import logging
 import sqlite3
 import re
-from types import TracebackType
 import typing as t
 from typing import Any, Dict, Tuple, Union
+import uuid
+
+from .exceptions import ObjectNotFound
 
 
 __all__ = ('select', 'Connection', 'Model')
@@ -70,43 +73,22 @@ class QueryResult:
         return [row[0] for row in self]
 
 
+@dataclass
 class Connection:
-    def __init__(self, filename: str) -> None:
-        self._filename = filename
-        self._conn: t.Optional[sqlite3.Connection] = None
+    path: str
+    echo: bool = False
 
-    def __enter__(self) -> 'Connection':
-        return self
+    @cached_property
+    def connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.path, detect_types=sqlite3.PARSE_DECLTYPES)
 
-    def __exit__(
-        self,
-        err_type: t.Optional[t.Type[BaseException]],
-        err: t.Optional[BaseException],
-        tb: TracebackType,
-    ) -> None:
-        self.commit() if err_type is None else self.rollback()
+        if self.echo:
+            conn.set_trace_callback(logger.debug)
 
-    def _get_connection(self) -> sqlite3.Connection:
-        def close_connection():
-            # if self.echo:
-            #     logger.debug('Closing SQLite connection: %s', conn)
-            self._conn.close()
+        conn.execute('PRAGMA foreign_keys = ON')
+        atexit.register(conn.close)
 
-        if self._conn is None:
-            self._conn = sqlite3.connect(self._filename, detect_types=sqlite3.PARSE_DECLTYPES)
-            self._conn.set_trace_callback(logger.debug)
-            self._conn.execute('PRAGMA foreign_keys = ON')
-            atexit.register(close_connection)
-        return self._conn
-
-    def close(self) -> None:
-        if self._conn:
-            self._conn.close()
-            self._conn = None
-
-    def commit(self) -> None:
-        if self._conn is not None:
-            self._conn.commit()
+        return conn
 
     def execute(
         self,
@@ -121,15 +103,15 @@ class Connection:
             parameters = payload
 
         return QueryResult(
-            cursor=self._get_connection().execute(str(stmt), parameters),
+            cursor=self.connection.execute(str(stmt), parameters),
         )
 
     def executescript(self, sql_script: str, raw: bool = False) -> None:
         if raw:
-            self._get_connection().executescript(sql_script)
+            self.connection.executescript(sql_script)
         else:
             for stmt in sql_script.split(';'):
-                self._get_connection().execute(stmt)
+                self.connection.execute(stmt)
 
     def query(
         self,
@@ -145,13 +127,21 @@ class Connection:
             row_factory = partial(model_row_factory, model_class=stmt.model_class)
 
         return QueryResult(
-            cursor=self._get_connection().execute(str(stmt), parameters),
+            cursor=self.connection.execute(str(stmt), parameters),
             row_factory=row_factory
         )
 
-    def rollback(self) -> None:
-        if self._conn is not None:
-            self._conn.rollback()
+    @contextmanager
+    def transaction(self):
+        savepoint_name = f'sp_{uuid.uuid4().hex}'
+        try:
+            self.execute(f'SAVEPOINT {savepoint_name}')
+            yield
+            self.execute(f'RELEASE SAVEPOINT {savepoint_name}')
+        except Exception:
+            self.execute(f'ROLLBACK TO SAVEPOINT {savepoint_name}')
+            self.execute(f'RELEASE SAVEPOINT {savepoint_name}')
+            raise
 
 
 @dataclass(frozen=True)
@@ -165,17 +155,17 @@ class SelectStatement:
     def __add__(self, other: str) -> 'SelectStatement':
         if not isinstance(other, str):
             return NotImplemented
-        return type(self)(query=other, model_class=self.model_class)
+        return type(self)(query=self.query + other, model_class=self.model_class)
 
     def limit(self, value: int) -> 'SelectStatement':
-        return self + 'LIMIT %d' % value
+        return self + ' LIMIT %d' % value
 
     def offset(self, value: int) -> 'SelectStatement':
-        return self + 'OFFSET %d' % value
+        return self + ' OFFSET %d' % value
 
     def order_by(self, name: str, desc: bool = False) -> 'SelectStatement':
         direction = 'DESC' if desc else 'ASC'
-        return self + ('ORDER BY %s %s' % (name, direction))
+        return self + (' ORDER BY %s %s' % (name, direction))
 
 
 class SQLQueryBuilder:
@@ -199,7 +189,7 @@ class SQLQueryBuilder:
         return select(self._model_class)
 
     def select_by_pk(self) -> SelectStatement:
-        return self.select() + f'WHERE {self._where_pk()}'
+        return self.select() + f' WHERE {self._where_pk()}'
 
     def update(self) -> str:
         table_name = self._model_class.get_table_name()
@@ -227,11 +217,22 @@ class Model:
                 id_ = (id_,)
             params = {name: value for name, value in zip(self.get_primary_key(), id_)}
 
-        with self.get_connection() as connection:
-            connection.execute(self.get_builder().delete(), **params)
+        connection = self.get_connection()
+
+        with connection.transaction():
+            connection.execute(self.get_builder().delete(), params)
 
     @classmethod
-    def find(cls, id_: PrimaryKey) -> t.Optional['Model']:
+    def find(cls, id_: PrimaryKey) -> 'Model':
+        row = cls.get_or_none(id_)
+
+        if row is None:
+            raise ObjectNotFound(f'{cls.__name__} with ID {id_} not found.')
+
+        return row
+
+    @classmethod
+    def get_or_none(cls, id_: PrimaryKey) -> t.Optional['Model']:
         if isinstance(id_, dict):
             params = id_
         else:
@@ -240,7 +241,7 @@ class Model:
             params = {name: value for name, value in zip(cls.get_primary_key(), id_)}
 
         row: t.Optional[Model] = cls.get_connection().query(
-            cls.get_builder().select_by_pk(), model_class=cls, **params
+            cls.get_builder().select_by_pk(), params
         ).fetchone()
 
         return row
@@ -291,11 +292,12 @@ class Model:
         return False
 
     def save(self) -> None:
+        connection = self.get_connection()
         is_empty_id = self.get_id() is None
 
         if not is_empty_id:
-            with self.get_connection() as connection:
-                result = connection.execute(self.get_builder().update(), **self.as_dict())
+            with connection.transaction():
+                result = connection.execute(self.get_builder().update(), self.as_dict())
 
                 if result.cursor.rowcount > 0:
                     return None
@@ -305,8 +307,8 @@ class Model:
         if is_empty_id and (is_composite_pk or not self.is_autoincrement_pk()):
             raise ValueError('You must specify a value for the primary key.')
 
-        with self.get_connection() as connection:
-            result = connection.execute(self.get_builder().insert(), **self.as_dict())
+        with connection.transaction():
+            result = connection.execute(self.get_builder().insert(), self.as_dict())
 
             if is_empty_id and self.is_autoincrement_pk():
                 self.set_id(result.cursor.lastrowid)

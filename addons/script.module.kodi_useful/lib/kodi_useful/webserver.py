@@ -1,6 +1,4 @@
-from __future__ import annotations
-
-import sys
+from datetime import datetime
 from functools import cached_property, partial
 from http import server, HTTPStatus
 import mimetypes
@@ -13,13 +11,9 @@ import threading
 import typing as t
 from urllib.parse import urlsplit
 
-from .core import QueryParams
-
-try:
-    import xbmcaddon
-    from xbmcvfs import translatePath
-except ImportError:
-    pass
+from .core import current_addon
+from .routing import QueryParams
+from .exceptions import HTTPError, ObjectNotFound, ValidationError
 
 if t.TYPE_CHECKING:
     from urllib.parse import SplitResult
@@ -44,6 +38,13 @@ def guess_type(path: PathLike) -> str:
     return ctype
 
 
+class JSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+
 class Response(t.NamedTuple):
     """Response object. Contains fields: response body, status, and headers."""
 
@@ -60,17 +61,12 @@ class Response(t.NamedTuple):
         return {} if self.headers is None else self.headers
 
 
-class HTTPError(Exception):
-    def __init__(self, status: HTTPStatus) -> None:
-        self.status = status
-
-
 class HTTPRequestHandler(server.BaseHTTPRequestHandler):
     def __init__(
         self,
         *args: t.Any,
         url_handlers: t.Dict[str, t.Dict[str, t.Callable]],
-        root_dir: PathLike,
+        root_dir: str,
         **kwargs: t.Any,
     ) -> None:
         self.url_handlers = url_handlers
@@ -105,7 +101,7 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
         return QueryParams(self.url.query)
 
     @cached_property
-    def url(self) -> SplitResult:
+    def url(self) -> 'SplitResult':
         """
         Returns the parsed URL of the request from 5 components:
         <scheme>://<netloc>/<path>?<query>#<fragment>
@@ -155,8 +151,12 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
 
             self.wfile.write(r.get_body())
+        except ObjectNotFound as err:
+            self.send_error(HTTPStatus.NOT_FOUND, str(err))
+        except ValidationError as err:
+            self.send_error(HTTPStatus.UNPROCESSABLE_ENTITY, str(err))
         except HTTPError as err:
-            self.send_error(err.status)
+            self.send_error(err.status, err.message or None)
         except Exception as err:
             self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(err))
 
@@ -168,7 +168,7 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
 
     def send_json(self, data, status=HTTPStatus.OK):
         try:
-            json_string = json.dumps(data)
+            json_string = json.dumps(data, cls=JSONEncoder)
         except TypeError:
             return self.send_error(HTTPStatus.BAD_REQUEST)
 
@@ -223,10 +223,7 @@ class HTTPServer:
         self._httpd_thread: t.Optional[threading.Thread] = None
 
         if not root_dir:
-            addon_path = translatePath(xbmcaddon.Addon().getAddonInfo('path'))
-            root_dir = pathlib.Path(addon_path) / 'resources' / 'www'
-        else:
-            root_dir = pathlib.Path(root_dir)
+            root_dir = current_addon.get_path('resources', 'www')
 
         self._url_handlers = {}
         self._handler = partial(
@@ -242,7 +239,7 @@ class HTTPServer:
         return self.register_handler(path, method='get')
 
     def log(self, msg: str) -> None:
-        print(msg, file=sys.stderr)
+        current_addon.logger.info(msg)
 
     def is_running(self) -> bool:
         """Returns true if the web server is running, false otherwise."""
@@ -322,7 +319,7 @@ if __name__ == '__main__':
     srv = HTTPServer(port=9000, root_dir='.')
 
     @srv.post('/')
-    def f(request_handler: HTTPRequestHandler):
+    def func(request_handler: HTTPRequestHandler):
         print(request_handler.form.get('test'))
         return request_handler.send_json({'status': True})
 

@@ -3,7 +3,7 @@ import typing as t
 from urllib.parse import parse_qs, urlencode
 
 from .enums import Scope
-from .exceptions import RouterError
+from .exceptions import RouterError, ValidationError
 from .introspection import get_function_arguments, Parameter
 from .utils import cast_bool
 
@@ -46,8 +46,13 @@ class QueryParams:
         value = self.get_list(name, required=required, type_cast=type_cast)
         return value[-1] if len(value) > 0 else default
 
-    def get_bool(self, name: str, default: t.Optional[bool] = None) -> t.Optional[bool]:
-        return self.get(name, default=default, type_cast=cast_bool)
+    def get_bool(
+        self,
+        name: str,
+        default: t.Optional[bool] = None,
+        required: bool = False,
+    ) -> t.Optional[bool]:
+        return self.get(name, default=default, required=required, type_cast=cast_bool)
 
     @t.overload
     def get_int(self, name: str) -> t.Optional[int]: ...
@@ -58,11 +63,21 @@ class QueryParams:
     @t.overload
     def get_int(self, name: str, default: int) -> int: ...
 
-    def get_int(self, name: str, default: t.Optional[int] = None) -> t.Optional[int]:
-        return self.get(name, default=default, type_cast=int)
+    def get_int(
+        self,
+        name: str,
+        default: t.Optional[int] = None,
+        required: bool = False,
+    ) -> t.Optional[int]:
+        return self.get(name, default=default, required=required, type_cast=int)
 
-    def get_int_list(self, name: str, default: t.Optional[t.List[int]] = None) -> t.Optional[t.List[int]]:
-        return self.get_list(name, default=default, type_cast=int)
+    def get_int_list(
+        self,
+        name: str,
+        default: t.Optional[t.List[int]] = None,
+        required: bool = False,
+    ) -> t.Optional[t.List[int]]:
+        return self.get_list(name, default=default, required=required, type_cast=int)
 
     def get_list(
         self,
@@ -73,7 +88,7 @@ class QueryParams:
     ) -> t.List[t.Any]:
         if name not in self._params:
             if required:
-                raise ValueError(f'The {name!r} parameter is missing in the query string.')
+                raise ValidationError(f'The {name!r} parameter is missing in the query string.')
 
             if default is None:
                 default = []
