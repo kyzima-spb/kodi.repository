@@ -35,7 +35,7 @@ jobs:
           token: ${{ secrets.PAT }}
       -
         name: Create Kodi repository
-        run: python scripts/create-repository --datadir public addons/*
+        run: python scripts/create-repository --datadir www-public addons/*
       -
         name: Create directory listing
         run: python scripts/create-index public
@@ -45,7 +45,7 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           # Upload entire repository
-          path: './public'
+          path: './www-public'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
