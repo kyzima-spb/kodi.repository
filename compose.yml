@@ -7,6 +7,7 @@ volumes:
   ca-certificates:
   kodi-profile:
   wwwdata:
+  node_modules:
 
 configs:
   nginx_default:
@@ -36,6 +37,7 @@ services:
       - public
     ports:
       - "5900:5900"
+      - "9000:9000"
     environment:
       KODI_EXTRA_ARGS: --debug
     volumes:
@@ -46,14 +48,31 @@ services:
       - ./addons/plugin.video.1tv.ru:/kodi/addons/plugin.video.1tv.ru
 #      - ./addons/plugin.vk.com:/kodi/addons/plugin.vk.com
       - ./addons/repository.kirill.vercetti:/kodi/addons/repository.kirill.vercetti
-#      - ./addons/plugin.video.uplayer:/home/user/.kodi/addons/plugin.video.uplayer
+      - ./addons/plugin.video.uplayer:/kodi/addons/plugin.video.uplayer
 #      - ./addons/script.module.yt.dlp:/home/user/.kodi/addons/script.module.yt.dlp
       - ./addons/script.module.kodi_useful:/kodi/addons/script.module.kodi_useful
 #      - ./addons/script.module.vk_api:/kodi/addons/script.module.vk_api
       - ./addons/script.module.yt-dlp:/kodi/addons/script.module.yt-dlp
-      - ./addons/plugin.video.demo:/kodi/addons/plugin.video.demo
+#      - ./addons/plugin.video.demo:/kodi/addons/plugin.video.demo
     depends_on:
       - nginx
+
+  uplayer-web:
+    build:
+      context: ./addons/plugin.video.uplayer/web/app
+      dockerfile: ../Dockerfile
+      target: development
+    networks:
+      - private
+      - public
+    ports:
+      - "127.0.0.1:5173:5173"
+    environment:
+      VITE_API_URL: "http://127.0.0.1:9000"
+    volumes:
+      - /app/node_modules
+      - ./addons/plugin.video.uplayer/web/app:/app
+      - ./addons/plugin.video.uplayer/resources/www:/app/dist
 
   repo:
     image: python:3.13-slim-bookworm
