@@ -38,7 +38,7 @@ jobs:
         run: python scripts/create-repository --datadir www-public addons/*
       -
         name: Create directory listing
-        run: python scripts/create-index public
+        run: python scripts/create-index www-public
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact
