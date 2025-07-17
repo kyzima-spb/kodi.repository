@@ -108,9 +108,17 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
         """
         return urlsplit(self.path)
 
+    def end_headers(self) -> None:
+        self.send_headers({
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true',
+        })
+        super().end_headers()
+
     def process_request(self) -> None:
         method = self.command.lower()
-        # self.request
 
         if self.url.path.startswith('/static'):
             if method not in ('get', 'head'):
@@ -124,7 +132,11 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
 
         handlers = self.url_handlers[path]
 
-        if method not in handlers:
+        if method == 'options':
+            self.send_response(HTTPStatus.OK)
+            self.end_headers()
+            return None
+        elif method not in handlers:
             return self.send_error(HTTPStatus.METHOD_NOT_ALLOWED)
 
         handler = handlers[method]
@@ -144,10 +156,7 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
             r = Response(*resp)
 
             self.send_response(r.status)
-
-            for name, value in r.get_headers().items():
-                self.send_header(name, value)
-
+            self.send_headers(r.get_headers())
             self.end_headers()
 
             self.wfile.write(r.get_body())
@@ -165,6 +174,11 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
     do_HEAD = process_request
     do_POST = process_request
     do_PUT = process_request
+    do_OPTIONS = process_request
+
+    def send_headers(self, headers):
+        for name, value in headers.items():
+            self.send_header(name, value)
 
     def send_json(self, data, status=HTTPStatus.OK):
         try:
