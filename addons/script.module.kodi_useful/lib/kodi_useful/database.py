@@ -4,6 +4,7 @@ from dataclasses import dataclass, fields
 import datetime
 from functools import cached_property, lru_cache, partial, wraps
 import logging
+import json
 import sqlite3
 import re
 import typing as t
@@ -22,10 +23,13 @@ logger = logging.getLogger(__name__)
 
 sqlite3.register_adapter(datetime.date, lambda v: v.isoformat())
 sqlite3.register_adapter(datetime.datetime, lambda v: v.isoformat())
+sqlite3.register_adapter(dict, lambda v: json.dumps(v))
+sqlite3.register_adapter(list, lambda v: json.dumps(v))
 
 sqlite3.register_converter('date', lambda v: datetime.date.fromisoformat(v.decode()))
 sqlite3.register_converter('datetime', lambda v: datetime.datetime.fromisoformat(v.decode()))
 sqlite3.register_converter('timestamp', lambda v: datetime.datetime.fromtimestamp(int(v)))
+sqlite3.register_converter('JSON', lambda v: json.loads(v.decode('utf-8')))
 
 
 def model_row_factory(
