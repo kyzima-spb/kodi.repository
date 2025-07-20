@@ -1,14 +1,19 @@
+import json
 import pathlib
 import typing as t
-from .core import QueryParams
+from .exceptions import HTTPError as HTTPError
+from .routing import QueryParams
 from _typeshed import Incomplete
 from functools import cached_property
-from http import HTTPStatus, server
+from http import server
 from urllib.parse import SplitResult
 
 __all__ = ['HTTPRequestHandler', 'HTTPError', 'HTTPServer', 'Response']
 
 PathLike = str | pathlib.Path
+
+class JSONEncoder(json.JSONEncoder):
+    def default(self, obj): ...
 
 class Response(t.NamedTuple):
     """Response object. Contains fields: response body, status, and headers."""
@@ -18,14 +23,10 @@ class Response(t.NamedTuple):
     def get_body(self) -> bytes: ...
     def get_headers(self) -> dict[str, str]: ...
 
-class HTTPError(Exception):
-    status: Incomplete
-    def __init__(self, status: HTTPStatus) -> None: ...
-
 class HTTPRequestHandler(server.BaseHTTPRequestHandler):
     url_handlers: Incomplete
     root_dir: Incomplete
-    def __init__(self, *args: t.Any, url_handlers: dict[str, dict[str, t.Callable]], root_dir: PathLike, **kwargs: t.Any) -> None: ...
+    def __init__(self, *args: t.Any, url_handlers: dict[str, dict[str, t.Callable]], root_dir: str, **kwargs: t.Any) -> None: ...
     @cached_property
     def form(self) -> QueryParams: ...
     @cached_property
@@ -42,12 +43,15 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
         Returns the parsed URL of the request from 5 components:
         <scheme>://<netloc>/<path>?<query>#<fragment>
         """
+    def end_headers(self) -> None: ...
     def process_request(self) -> None: ...
     do_DELETE = process_request
     do_GET = process_request
     do_HEAD = process_request
     do_POST = process_request
     do_PUT = process_request
+    do_OPTIONS = process_request
+    def send_headers(self, headers) -> None: ...
     def send_json(self, data, status=...): ...
     def send_static(self) -> None: ...
     def render_template(self, name, **kwargs): ...

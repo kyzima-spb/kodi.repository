@@ -8,12 +8,13 @@ import shutil
 import socket
 from string import Template
 import threading
+import traceback
 import typing as t
 from urllib.parse import urlsplit
 
-from .core import current_addon
-from .routing import QueryParams
-from .exceptions import HTTPError, ObjectNotFound, ValidationError
+from ..core import current_addon
+from ..routing import QueryParams
+from ..exceptions import HTTPError, ObjectNotFound, ValidationError
 
 if t.TYPE_CHECKING:
     from urllib.parse import SplitResult
@@ -167,7 +168,8 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
         except HTTPError as err:
             self.send_error(err.status, err.message or None)
         except Exception as err:
-            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(err))
+            tb_str = traceback.format_exc()
+            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, tb_str)
 
     do_DELETE = process_request
     do_GET = process_request
