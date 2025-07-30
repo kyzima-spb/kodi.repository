@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="script.module.boosty-api" name="boosty_api" version="11.9.9-7" provider-name="Kirill Vercetti">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+    <import addon="script.module.requests" version="2.12.4"/>
+  </requires>
+  <extension point="xbmc.python.module" library="lib"/>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Boosty.to unofficial API client</summary>
+    <summary lang="ru_RU">Boosty.to неофициальный API-клиент</summary>
+    <description lang="en_GB">Boosty.to unofficial API client for authentication and user operations</description>
+    <description lang="ru_RU">Boosty.to неофициальный API-клиент, реализующий авторизацию, токены, запросы пользователей и подписок</description>
+    <license>MIT</license>
+    <platform>all</platform>
+    <source>https://github.com/kyzima-spb/boosty-api</source>
+    <assets>
+      <icon>resources/icon.png</icon>
+    </assets>
+  </extension>
+</addon>
