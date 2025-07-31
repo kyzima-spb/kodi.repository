@@ -45,15 +45,6 @@ services:
       - /run/user/1000/pulse:/run/user/1000/pulse
       - ca-certificates:/usr/local/share/ca-certificates
       - kodi-profile:/kodi
-      - ./addons/plugin.video.1tv.ru:/kodi/addons/plugin.video.1tv.ru
-#      - ./addons/plugin.vk.com:/kodi/addons/plugin.vk.com
-      - ./addons/repository.kirill.vercetti:/kodi/addons/repository.kirill.vercetti
-      - ./addons/plugin.video.uplayer:/kodi/addons/plugin.video.uplayer
-#      - ./addons/script.module.yt.dlp:/home/user/.kodi/addons/script.module.yt.dlp
-      - ./addons/script.module.kodi_useful:/kodi/addons/script.module.kodi_useful
-#      - ./addons/script.module.vk_api:/kodi/addons/script.module.vk_api
-      - ./addons/script.module.yt-dlp:/kodi/addons/script.module.yt-dlp
-#      - ./addons/plugin.video.demo:/kodi/addons/plugin.video.demo
     depends_on:
       - nginx
 

@@ -16,7 +16,7 @@ docker compose exec kodi \
 ## Очистка кеша базы аддонов
 
 ```shell
-docker compose exec kodi rm /kodi/userdata/Database/Addons*.db
+docker compose exec kodi sh -c 'rm /kodi/userdata/Database/Addons*.db'
 ```
 
 ## Полезные ресурсы

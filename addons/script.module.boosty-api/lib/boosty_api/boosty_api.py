@@ -6,7 +6,9 @@ import time
 import typing as t
 
 import requests
+from requests.adapters import HTTPAdapter
 
+from .enums import MediaType
 from .exceptions import AuthError, BoostyError, BoostyApiError, LoginRequired
 from .utils import cookie_jar_to_list, set_cookies_from_list
 
@@ -63,6 +65,7 @@ class BoostyApi:
         api_url: str = 'https://api.boosty.to',
         version: str = '1',
         user_agent: str = DEFAULT_USER_AGENT,
+        debug: bool = False,
     ) -> None:
         self._user_input_handler = user_input_handler
         self._credentials = Credentials(credentials_filename)
@@ -77,6 +80,9 @@ class BoostyApi:
         self.login = login
         self.session = self._get_session()
 
+        if debug:
+            self.enable_debug()
+
     def __repr__(self) -> str:
         args = ', '.join((
             f'user_input_handler={self._user_input_handler!r}',
@@ -88,6 +94,27 @@ class BoostyApi:
         ))
         return f'{type(self).__name__}({args})'
 
+    def enable_debug(self) -> None:
+        self.logger.setLevel(logging.INFO)
+        self.logger.addHandler(logging.StreamHandler())
+
+        class DebugAdapter(HTTPAdapter):
+            def send(self, request: requests.PreparedRequest, **kwargs: t.Any) -> requests.Response:  # type: ignore[override]
+                response = super().send(request, **kwargs)
+
+                print('{request.method} {response.status_code} {request.url} {response.history}'.format(
+                    request=request, response=response
+                ))
+                print('{request.headers!r}\n{request.body!r}'.format(request=request))
+
+                if not response.ok:
+                    print(response.text)
+
+                return response
+
+        self.session.mount('http://', DebugAdapter())
+        self.session.mount('https://', DebugAdapter())
+
     @property
     def active_sessions(self) -> t.Sequence[t.Dict[str, t.Any]]:
         return self.request('get', '/user/session/')['data']['sessions']
@@ -97,7 +124,9 @@ class BoostyApi:
         self.request('delete', '/user/session/')
 
     @property
-    def current_user(self) -> t.Dict[str, t.Any]:
+    def current_user(self) -> t.Optional[t.Dict[str, t.Any]]:
+        if self._credentials.token is None:
+            return None
         return self.request('get', '/user/current')
 
     def _get_session(self) -> requests.Session:
@@ -110,7 +139,7 @@ class BoostyApi:
             'origin': 'https://boosty.to',
             'pragma': 'no-cache',
             'referer': 'https://boosty.to/',
-            'user-agent': DEFAULT_USER_AGENT,
+            'user-agent': self.user_agent,
         })
 
         if self._credentials.client_id is None:
@@ -252,8 +281,71 @@ class BoostyApi:
         })
 
 
-def get_subscriptions(boosty: BoostyApi, limit: int = 30) -> t.Dict[str, t.Any]:
-    return boosty.request('get', '/user/subscriptions', params={
-        'limit': limit,
+def get_subscriptions(
+    boosty_session: BoostyApi,
+    limit: t.Optional[int] = None,
+    offset: t.Optional[int] = None,
+) -> t.Dict[str, t.Any]:
+    """
+    Returns the subscriptions of the current user.
+
+    Arguments:
+        boosty_session (BoostyApi): Current session.
+        limit (int): The number of returned elements.
+        offset (str): The offset from the beginning.
+    """
+    params: t.Dict[str, t.Any] = {
         'with_follow': 'true',
-    })
+    }
+
+    if limit:
+        params['limit'] = limit
+
+    if offset:
+        params['offset'] = offset
+
+    return boosty_session.request('get', '/user/subscriptions', params=params)
+
+
+def get_media(
+    boosty_session: BoostyApi,
+    username: str = '',
+    media_type: MediaType = MediaType.ALL,
+    limit: t.Optional[int] = None,
+    offset: str = '',
+    only_allowed: bool = False,
+) -> t.Dict[str, t.Any]:
+    """
+    Returns uploaded media files of the user.
+
+    Arguments:
+        boosty_session (BoostyApi): Current session.
+        username (str): Username, default current user or required.
+        media_type (MediaType): Type of returned media, by default any.
+        limit (int): The number of returned elements.
+        offset (str): The offset from the beginning, returns the API Boosty.
+        only_allowed (bool): Only available to viewing.
+    """
+    if not username:
+        user = boosty_session.current_user
+
+        if user is None:
+            raise ValueError('Username is required')
+
+        username = user['name']
+
+    params: t.Dict[str, t.Any] = {
+        'type': media_type,
+        'limit_by': 'media',
+    }
+
+    if limit:
+        params['limit'] = limit
+
+    if offset:
+        params['offset'] = offset
+
+    if only_allowed:
+        params['only_allowed'] = 'true'
+
+    return boosty_session.request('get', f'/blog/{username}/media_album/', params=params)
