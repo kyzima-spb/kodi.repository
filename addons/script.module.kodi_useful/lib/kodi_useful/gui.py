@@ -12,6 +12,7 @@ from .enums import Content
 __all__ = (
     'alert',
     'create_next_element',
+    'create_next_item',
     'prompt',
     'Directory',
 )
@@ -72,6 +73,16 @@ def create_next_element(
     handler_kwargs[offset_name] = offset
     current_addon.logger.debug(f'Next url kwargs {handler_kwargs}')
     url = current_addon.url_for(func_or_name, **handler_kwargs)
+
+    return url, item, True
+
+
+def create_next_item(url):
+    current_addon = Addon.get_instance()
+
+    label = current_addon.localize('Next page')
+    item = xbmcgui.ListItem(label)
+    item.getVideoInfoTag().setPlot(label)
 
     return url, item, True
 

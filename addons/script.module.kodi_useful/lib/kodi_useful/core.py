@@ -72,9 +72,9 @@ class Addon:
             return handler
         return decorator
 
-    def get_data_path(self, name: str, *paths: str) -> str:
+    def get_data_path(self, *paths: str, translate: bool = True) -> str:
         """Returns the path to the plugin user files."""
-        return os.path.join(self.addon_data_dir, name, *paths)
+        return self.get_path(*paths, translate=translate, id_='profile')
 
     @classmethod
     def get_instance(cls, addon_id: t.Optional[str] = None) -> 'Addon':
@@ -85,9 +85,14 @@ class Addon:
 
         return cls._instances[addon_id]
 
-    def get_path(self, name: str, *paths: str) -> str:
+    def get_path(self, *paths: str, translate=True, id_: str = 'path') -> str:
         """Returns the path to the plugin files."""
-        return os.path.join(self.addon_dir, name, *paths)
+        path = os.path.join(self.addon.getAddonInfo(id_), *paths)
+
+        if translate:
+            path = translatePath(path)
+
+        return path
 
     def get_setting(
         self,
