@@ -10,7 +10,16 @@ __all__ = ('BoostyError', 'AuthError', 'BoostyApiError', 'LoginRequired')
 
 
 class BoostyError(Exception):
-    pass
+    def __init__(self, error: t.Union[t.Dict[str, str], str]) -> None:
+        if isinstance(error, dict):
+            self.error_code = error.get('error')
+            self.error_description = error.get('error_description', str(error))
+        else:
+            self.error_code = None
+            self.error_description = error
+
+    def __str__(self) -> str:
+        return self.error_description
 
 
 class AuthError(BoostyError):

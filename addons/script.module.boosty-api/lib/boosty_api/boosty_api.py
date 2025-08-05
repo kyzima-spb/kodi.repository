@@ -1,6 +1,9 @@
+from datetime import date
+from functools import partial
 from http import HTTPStatus
 import logging
 import json
+import re
 import threading
 import time
 import typing as t
@@ -10,6 +13,7 @@ from requests.adapters import HTTPAdapter
 
 from .enums import MediaType
 from .exceptions import AuthError, BoostyError, BoostyApiError, LoginRequired
+from .models import Collection, Filter, MediaCollection
 from .utils import cookie_jar_to_list, set_cookies_from_list
 
 
@@ -80,6 +84,12 @@ class BoostyApi:
         self.login = login
         self.session = self._get_session()
 
+        self.get_media = partial(get_media, self)
+        self.get_posts = partial(get_posts, self)
+        self.get_profile = partial(get_profile, self)
+        self.get_profile_by_url = partial(get_profile_by_url, self)
+        self.get_subscriptions = partial(get_subscriptions, self)
+
         if debug:
             self.enable_debug()
 
@@ -125,9 +135,15 @@ class BoostyApi:
 
     @property
     def current_user(self) -> t.Optional[t.Dict[str, t.Any]]:
+        """Returns the current user if the current session is authenticated."""
         if self._credentials.token is None:
             return None
         return self.request('get', '/user/current')
+
+    @property
+    def default_currency(self) -> str:
+        """Returns the default currency for the current session."""
+        return self.request('get', '/payment/default_currency', skip_auth=True)['defaultCurrency']
 
     def _get_session(self) -> requests.Session:
         """Returns a session for working with HTTP requests."""
@@ -176,11 +192,7 @@ class BoostyApi:
             raise exc_type('Invalid JSON response', **kwargs)
 
         if not response.ok:
-            message = response_dict.get(
-                'error_description',
-                response_dict.get('error', 'Unknown error')
-            )
-            raise exc_type(message, **kwargs)
+            raise exc_type(response_dict, **kwargs)
 
         return response_dict
 
@@ -241,6 +253,7 @@ class BoostyApi:
             return False
 
     def auth(self, force: bool = False) -> None:
+        """Starts the user authentication process."""
         if self._update_access_token(force=force):
             return None
 
@@ -248,15 +261,37 @@ class BoostyApi:
             raise LoginRequired('Login is required to auth')
 
         code = self._send_sms_code(self.login)
-        sms_code = self._pass_confirmation_code()
+        succeeded = False
 
-        self._credentials.token = self._get_token_by_code(self.login, code, sms_code)
+        while not succeeded:
+            try:
+                sms_code = self._pass_confirmation_code()
+                self._credentials.token = self._get_token_by_code(self.login, code, sms_code)
+                self._credentials.save()
+                succeeded = True
+            except AuthError as err:
+                if err.error_code not in {'invalid_sms_code', 'invalid_param'}:
+                    raise
+
+    def logout(self) -> None:
+        """Exits the current session."""
+        if self._credentials.token is None:
+            return None
+
+        response = self.session.delete(f'{self.api_url}/oauth/token', params={
+            'access_token': self._credentials.token['access_token'],
+            'device_id': self._credentials.client_id,
+            'device_os': 'web',
+        })
+        self._parse_response_or_raise(response, exc_type=AuthError)
+
+        self._credentials.token = None
         self._credentials.save()
 
-    def request(self, method: str, path: str, **kwargs: t.Any) -> t.Any:
+    def request(self, method: str, path: str, skip_auth: bool = False, **kwargs: t.Any) -> t.Any:
         url = f'{self.api_url}/v{self.api_version}/{path.lstrip("/")}'
 
-        if self._credentials.token:
+        if not skip_auth and self._credentials.token:
             headers = kwargs.setdefault('headers', {})
             headers['authorization'] = 'Bearer %s' % self._credentials.token['access_token']
 
@@ -281,40 +316,16 @@ class BoostyApi:
         })
 
 
-def get_subscriptions(
-    boosty_session: BoostyApi,
-    limit: t.Optional[int] = None,
-    offset: t.Optional[int] = None,
-) -> t.Dict[str, t.Any]:
-    """
-    Returns the subscriptions of the current user.
-
-    Arguments:
-        boosty_session (BoostyApi): Current session.
-        limit (int): The number of returned elements.
-        offset (str): The offset from the beginning.
-    """
-    params: t.Dict[str, t.Any] = {
-        'with_follow': 'true',
-    }
-
-    if limit:
-        params['limit'] = limit
-
-    if offset:
-        params['offset'] = offset
-
-    return boosty_session.request('get', '/user/subscriptions', params=params)
-
-
 def get_media(
     boosty_session: BoostyApi,
     username: str = '',
     media_type: MediaType = MediaType.ALL,
     limit: t.Optional[int] = None,
-    offset: str = '',
+    offset: t.Optional[str] = None,
     only_allowed: bool = False,
-) -> t.Dict[str, t.Any]:
+    start_date: t.Optional[date] = None,
+    end_date: t.Optional[date] = None,
+) -> MediaCollection:
     """
     Returns uploaded media files of the user.
 
@@ -325,6 +336,8 @@ def get_media(
         limit (int): The number of returned elements.
         offset (str): The offset from the beginning, returns the API Boosty.
         only_allowed (bool): Only available to viewing.
+        start_date (date): Return from the specified date.
+        end_date (date): Return by the specified date.
     """
     if not username:
         user = boosty_session.current_user
@@ -334,18 +347,144 @@ def get_media(
 
         username = user['name']
 
-    params: t.Dict[str, t.Any] = {
+    filter_data = Filter(
+        limit=limit,
+        offset=offset,
+        only_allowed=only_allowed,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    params = {
         'type': media_type,
         'limit_by': 'media',
+        **filter_data.to_dict()
     }
 
-    if limit:
-        params['limit'] = limit
+    response_dict = boosty_session.request('get', f'/blog/{username}/media_album/', params=params)
 
-    if offset:
-        params['offset'] = offset
+    return MediaCollection(
+        limit=limit,
+        offset=response_dict['extra']['offset'],
+        is_last=response_dict['extra']['isLast'],
+        iterable=response_dict['data']['mediaPosts'],
+    )
 
-    if only_allowed:
-        params['only_allowed'] = 'true'
 
-    return boosty_session.request('get', f'/blog/{username}/media_album/', params=params)
+def get_posts(
+    boosty_session: BoostyApi,
+    username: str = '',
+    limit: t.Optional[int] = None,
+    offset: str = '',
+    only_allowed: bool = False,
+    start_date: t.Optional[date] = None,
+    end_date: t.Optional[date] = None,
+) -> t.Dict[str, t.Any]:
+    """
+    Returns blog posts of the user.
+
+    Arguments:
+        boosty_session (BoostyApi): Current session.
+        username (str): Username, default current user or required.
+        limit (int): The number of returned elements.
+        offset (str): The offset from the beginning.
+        only_allowed (bool): Only available to viewing.
+        start_date (date): Return from the specified date.
+        end_date (date): Return by the specified date.
+    """
+
+    if not username:
+        user = boosty_session.current_user
+
+        if user is None:
+            raise ValueError('Username is required')
+
+        username = user['name']
+
+    filter_data = Filter(
+        limit=limit,
+        offset=offset,
+        only_allowed=only_allowed,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    params = filter_data.to_dict(remap_keys={'only_allowed': 'is_only_allowed'})
+
+    return boosty_session.request('get', f'/blog/{username}/post/', params=params)
+
+
+def get_profile(boosty_session: BoostyApi, username: str) -> t.Dict[str, t.Any]:
+    """Returns a user by username."""
+    return boosty_session.request('get', f'/blog/{username}')
+
+
+def get_profile_by_url(boosty_session: BoostyApi, url: str) -> t.Dict[str, t.Any]:
+    """Returns a user using a URL containing their name."""
+    match = re.search(r'//boosty.to/(.+?)/', url + '/')
+
+    if not match:
+        raise ValueError(f'The passed URL {url!r} is not a Boosty page.')
+
+    return get_profile(boosty_session, username=match.group(1))
+
+
+def get_subscriptions(
+    boosty_session: BoostyApi,
+    limit: t.Optional[int] = None,
+    offset: t.Optional[int] = None,
+) -> Collection:
+    """
+    Returns the subscriptions of the current user.
+
+    Arguments:
+        boosty_session (BoostyApi): Current session.
+        limit (int): The number of returned elements.
+        offset (str): The offset from the beginning.
+    """
+    filter_data = Filter(limit=limit, offset=offset)
+
+    params: t.Dict[str, t.Any] = {
+        'with_follow': 'true',
+        **filter_data.to_dict()
+    }
+
+    response_dict = boosty_session.request('get', '/user/subscriptions', params=params)
+
+    limit = response_dict.pop('limit')
+    offset = response_dict.pop('offset')
+
+    return Collection(
+        limit=limit,
+        offset=offset,
+        is_last=limit + offset > response_dict['total'],
+        iterable=response_dict.pop('data'),
+        extra=response_dict,
+    )
+
+
+def search(
+    boosty_session: BoostyApi,
+    q: str,
+    limit: int = 10,
+    offset: t.Optional[str] = None,
+    only_allowed: bool = False,
+    only_bought: bool = False,
+    start_date: t.Optional[date] = None,
+    end_date: t.Optional[date] = None,
+) -> t.Dict[str, t.Any]:
+    """Search publications by authors you follow."""
+    filter_data = Filter(
+        limit=limit,
+        offset=offset,
+        only_allowed=only_allowed,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    params: t.Dict[str, t.Any] = {
+        'search_query': q,
+        **filter_data.to_dict()
+    }
+
+    if only_bought:
+        params['only_bought'] = 'true'
+
+    return boosty_session.request('get', '/search/feed/post/', params=params)

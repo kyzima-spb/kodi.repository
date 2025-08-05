@@ -7,6 +7,7 @@ class MediaType(str, enum.Enum):
     AUDIO = 'audio'
     IMAGE = 'image'
     VIDEO = 'video'
+    UNKNOWN = 'unknown'
 
 
 class Quality(str, enum.Enum):
@@ -17,5 +18,7 @@ class Quality(str, enum.Enum):
     SD_480 = 'medium'
     HD = 'high'
     FHD = 'full_hd'
+    QHD = 'quad_hd'
+    UHD = 'ultra_hd'
     HLS = 'hls'
     DASH = 'dash'
