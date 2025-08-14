@@ -5,7 +5,7 @@ import sys
 import typing as t
 
 import xbmc
-from xbmcvfs import translatePath
+import xbmcvfs
 
 from . import utils
 from .routing import router, QueryParams
@@ -26,25 +26,23 @@ class Addon:
     def __init__(
         self,
         addon_id: t.Optional[str] = None,
-        locale_map: t.Optional[t.Dict[str, int]] = None,
-        locale_map_file: t.Optional[str] = None,
+        *,
         debug: bool = False,
     ) -> None:
-        self._instances[str(addon_id)] = self
-
         self.addon = utils.get_addon(addon_id)
         self.id = addon_id or self.addon.getAddonInfo('id')
 
-        self.addon_dir = translatePath(self.addon.getAddonInfo('path'))
-        self.addon_data_dir = translatePath(self.addon.getAddonInfo('profile'))
+        self.addon_dir = xbmcvfs.translatePath(self.addon.getAddonInfo('path'))
+        self.addon_data_dir = xbmcvfs.translatePath(self.addon.getAddonInfo('profile'))
 
-        if locale_map_file is not None:
-            locale_map_file = self.get_path(locale_map_file)
+        locale_map_file = self.get_path('resources', 'language', 'locale_map.json')
 
+        if xbmcvfs.exists(locale_map_file):
             with open(locale_map_file) as f:
-                locale_map = json.load(f)
+                self.locale_map = json.load(f)
+        else:
+            self.locale_map = {}
 
-        self.locale_map = locale_map or {}
         self.debug = debug or utils.debug_argument_passed()
 
         if self.debug:
@@ -78,19 +76,19 @@ class Addon:
 
     @classmethod
     def get_instance(cls, addon_id: t.Optional[str] = None) -> 'Addon':
-        addon_id = str(addon_id)
+        key = addon_id or ''
 
-        if addon_id not in cls._instances:
-            raise ValueError(f'Addon with {addon_id!r} not found.')
+        if key not in cls._instances:
+            cls._instances[key] = cls(addon_id)
 
-        return cls._instances[addon_id]
+        return cls._instances[key]
 
     def get_path(self, *paths: str, translate=True, id_: str = 'path') -> str:
         """Returns the path to the plugin files."""
         path = os.path.join(self.addon.getAddonInfo(id_), *paths)
 
         if translate:
-            path = translatePath(path)
+            path = xbmcvfs.translatePath(path)
 
         return path
 
@@ -129,7 +127,7 @@ class Addon:
             fallback = str(string_id)
 
         if not isinstance(string_id, int):
-            string_id = self.locale_map.get(string_id, -1)
+            string_id = self.locale_map.get(string_id.lower(), -1)
 
         if string_id < 0:
             result = fallback
@@ -166,4 +164,4 @@ class Addon:
         return self.router.url_for(func_or_name, base_url=self.url, **kwargs)
 
 
-current_addon = Addon()
+current_addon = Addon.get_instance()
