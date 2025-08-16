@@ -5,7 +5,7 @@ from .enums import Content
 from _typeshed import Incomplete
 from functools import cached_property
 
-__all__ = ['alert', 'create_next_element', 'prompt', 'Directory']
+__all__ = ['alert', 'confirm', 'create_next_element', 'create_next_item', 'notification', 'prompt', 'select', 'Directory']
 
 _F = t.TypeVar('_F', bound=t.Callable[..., t.Any])
 
@@ -14,7 +14,10 @@ class PromptResult(t.NamedTuple):
     canceled: bool = ...
     def __bool__(self) -> bool: ...
 
-def alert(title: str, message: str) -> bool: ...
+def alert(title: str, message: str, localize_args: tuple[t.Any, ...] = (), localize_kwargs: dict[str, t.Any] | None = None) -> bool: ...
+def confirm(title: str, message: str, nolabel: str = '', yeslabel: str = '', autoclose: int = 0, defaultbutton: int = ..., localize_args: tuple[t.Any, ...] = (), localize_kwargs: dict[str, t.Any] | None = None) -> bool: ...
+def notification(title: str, message: str, icon: str = '', show_time: int = 0, sound: bool = True, localize_args: tuple[t.Any, ...] = (), localize_kwargs: dict[str, t.Any] | None = None) -> None: ...
+def select(title: str, choices: list[str | xbmcgui.ListItem], autoclose: int = 0, preselect: int = -1, use_details: bool = False, localize_args: tuple[t.Any, ...] = (), localize_kwargs: dict[str, t.Any] | None = None) -> int: ...
 def create_next_element(func_or_name: str | t.Callable[..., None], items_per_page: int | None = None, limit_name: str = 'items_per_page', offset: int | None = None, offset_name: str = 'offset', **kwargs: t.Any) -> tuple[str, xbmcgui.ListItem, bool]:
     """
     Arguments:
@@ -31,6 +34,7 @@ def create_next_element(func_or_name: str | t.Callable[..., None], items_per_pag
         kwargs (dict):
             Query string parameters.
     """
+def create_next_item(url): ...
 def prompt(msg: str, required: bool = False, default: t.Any | None = None, type_cast: t.Callable[[str], t.Any] = None, hidden: bool = False) -> PromptResult:
     """
     Запрашивает данные от пользователя и возвращает ввод.

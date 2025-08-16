@@ -19,16 +19,16 @@ class Addon:
     handle: Incomplete
     query: Incomplete
     router: Incomplete
-    def __init__(self, addon_id: str | None = None, locale_map: dict[str, int] | None = None, locale_map_file: str | None = None, debug: bool = False) -> None: ...
+    def __init__(self, addon_id: str | None = None, *, debug: bool = False) -> None: ...
     def dispatch(self, query: QueryParams | None = None) -> None:
         """Processes a request."""
     def error_handler(self, exc_type: type[Exception]) -> t.Callable[[F], F]:
         """Adds a handler for the passed exception type."""
-    def get_data_path(self, name: str, *paths: str) -> str:
+    def get_data_path(self, *paths: str, translate: bool = True) -> str:
         """Returns the path to the plugin user files."""
     @classmethod
     def get_instance(cls, addon_id: str | None = None) -> Addon: ...
-    def get_path(self, name: str, *paths: str) -> str:
+    def get_path(self, *paths: str, translate: bool = True, id_: str = 'path') -> str:
         """Returns the path to the plugin files."""
     def get_setting(self, id_: str, type_: type | t.Callable[[str], t.Any] = ...) -> t.Any:
         """

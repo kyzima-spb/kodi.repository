@@ -2,8 +2,7 @@ import requests
 import typing as t
 import xml.etree.ElementTree as et
 from _typeshed import Incomplete
-from datetime import datetime as datetime
-from urllib.parse import parse_qsl as parse_qsl, urlencode as urlencode, urljoin as urljoin, urlunparse as urlunparse
+from urllib.parse import parse_qsl as parse_qsl, urlencode as urlencode, urlunparse as urlunparse
 
 def parse_html(html: str, tag: str = '', attrs: dict[str, str] | None = None) -> ElementProxy: ...
 
@@ -22,5 +21,12 @@ class ElementProxy:
 class Session(requests.Session):
     _base_url: Incomplete
     def __init__(self, base_url: str, headers: Incomplete | None = None) -> None: ...
-    def request(self, method: str | bytes, url: str | bytes, **kwargs: t.Any) -> requests.Response: ...
+    def request(self, method: str | bytes, url: str | bytes, params: dict[str, t.Any] = None, **kwargs: t.Any) -> requests.Response:
+        """
+        Выполняет HTTP запрос к серверу.
+
+        В URL адресе можно использовать именованные плейсхолдеры: /user/{user_id},
+        а значения для плейсхолдеров передавать в словаре params: {'user_id': 1, 'extended': 1}
+        Значения, для которых не заданы плейсхолдеры - будут использованы как параметры строки запроса.
+        """
     def parse_html(self, url: str | bytes, tag: str, *, attrs: dict[str, str] | None = None, method: str | bytes = 'get', **kwargs: t.Any) -> ElementProxy: ...

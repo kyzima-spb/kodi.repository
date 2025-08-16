@@ -5,20 +5,33 @@ import xbmc
 import xbmcgui
 import xbmcplugin
 
-from .core import Addon
+from .core import current_addon, Addon
 from .enums import Content
 
 
 __all__ = (
     'alert',
+    'confirm',
     'create_next_element',
     'create_next_item',
+    'notification',
     'prompt',
+    'select',
     'Directory',
 )
 
 
 _F = t.TypeVar('_F', bound=t.Callable[..., t.Any])
+
+
+def _localize(
+    string_id: t.Union[str, int],
+    localize_args: t.Tuple[t.Any, ...] = (),
+    localize_kwargs: t.Optional[t.Dict[str, t.Any]] = None,
+) -> str:
+    """Returns the translation for the passed identifier."""
+    localize_kwargs = localize_kwargs or {}
+    return current_addon.localize(string_id, *localize_args, **localize_kwargs)
 
 
 class PromptResult(t.NamedTuple):
@@ -29,8 +42,72 @@ class PromptResult(t.NamedTuple):
         return not self.canceled
 
 
-def alert(title: str, message: str) -> bool:
-    return xbmcgui.Dialog().ok(title, message)
+def alert(
+    title: str,
+    message: str,
+    localize_args: t.Tuple[t.Any, ...] = (),
+    localize_kwargs: t.Optional[t.Dict[str, t.Any]] = None,
+) -> bool:
+    return xbmcgui.Dialog().ok(
+        _localize(title, localize_args, localize_kwargs),
+        _localize(message, localize_args, localize_kwargs),
+    )
+
+
+def confirm(
+    title: str,
+    message: str,
+    nolabel: str = '',
+    yeslabel: str = '',
+    autoclose: int = 0,
+    defaultbutton: int = xbmcgui.DLG_YESNO_NO_BTN,
+    localize_args: t.Tuple[t.Any, ...] = (),
+    localize_kwargs: t.Optional[t.Dict[str, t.Any]] = None,
+) -> bool:
+    return xbmcgui.Dialog().yesno(
+        _localize(title, localize_args, localize_kwargs),
+        _localize(message, localize_args, localize_kwargs),
+        _localize(nolabel, localize_args, localize_kwargs),
+        _localize(yeslabel, localize_args, localize_kwargs),
+        autoclose,
+        defaultbutton,
+    )
+
+
+def notification(
+    title: str,
+    message: str,
+    icon: str = '',
+    show_time: int = 0,
+    sound: bool = True,
+    localize_args: t.Tuple[t.Any, ...] = (),
+    localize_kwargs: t.Optional[t.Dict[str, t.Any]] = None,
+) -> None:
+    xbmcgui.Dialog().notification(
+        _localize(title, localize_args, localize_kwargs),
+        _localize(message, localize_args, localize_kwargs),
+        icon,
+        show_time,
+        sound,
+    )
+
+
+def select(
+    title: str,
+    choices: t.List[t.Union[str, xbmcgui.ListItem]],
+    autoclose: int = 0,
+    preselect: int = -1,
+    use_details: bool = False,
+    localize_args: t.Tuple[t.Any, ...] = (),
+    localize_kwargs: t.Optional[t.Dict[str, t.Any]] = None,
+) -> int:
+    return xbmcgui.Dialog().select(
+        _localize(title, localize_args, localize_kwargs),
+        choices,
+        autoclose,
+        preselect,
+        use_details,
+    )
 
 
 def create_next_element(
