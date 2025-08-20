@@ -2,14 +2,22 @@ import glob as _glob
 import os
 import typing as t
 
+import xbmcvfs
+
 
 __all__ = (
+    'exists',
     'glob',
     'iglob',
     'makedirs',
     'rename',
     'symlink',
 )
+
+
+exists = xbmcvfs.exists
+makedirs = xbmcvfs.mkdirs
+rename = xbmcvfs.rename
 
 
 def _encode(path, encoding='utf-8'):
@@ -36,17 +44,6 @@ def iglob(
     if root_dir is not None:
         root_dir = _encode(root_dir)
     return _glob.iglob(_encode(pathname), root_dir=root_dir, **kwargs)
-
-
-def makedirs(pathname: t.AnyStr) -> None:
-    os.makedirs(_encode(pathname), mode=0o755, exist_ok=True)
-
-
-def rename(
-    src: t.AnyStr,
-    dst: t.AnyStr,
-) -> None:
-    os.rename(_encode(src), _encode(dst))
 
 
 def symlink(
