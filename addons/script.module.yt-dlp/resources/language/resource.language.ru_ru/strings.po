@@ -1,0 +1,222 @@
+# Kodi Media Center language file
+# Addon Name: Universal Player
+# Addon id: plugin.video.uplayer
+# Addon Provider: Kirill Vercetti
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: ru_RU\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
+"X-Generator: Poedit 3.2.2\n"
+
+msgctxt "#30000"
+msgid "Directory for saving downloaded files"
+msgstr "Директория для сохранения скачанных файлов"
+
+msgctxt "#30001"
+msgid "Preparing to download file..."
+msgstr "Подготовка к загрузке файла..."
+
+msgctxt "#30002"
+msgid "Download"
+msgstr "Скачать"
+
+msgctxt "#30003"
+msgid "Download status"
+msgstr "Статус загрузки"
+
+msgctxt "#30004"
+msgid "Downloading"
+msgstr "Скачивание"
+
+msgctxt "#30005"
+msgid "Adding Metadata"
+msgstr "Добавление метаданных"
+
+msgctxt "#30006"
+msgid "Wait..."
+msgstr "Ждите..."
+
+msgctxt "#30007"
+msgid "Canceled by user"
+msgstr "Отменено пользователем"
+
+msgctxt "#30008"
+msgid "File saved as %(filename)s"
+msgstr "Файл сохранен как %(filename)s"
+
+msgctxt "#30009"
+msgid "Downloaded: %(total)s"
+msgstr "Загружено: %(total)s"
+
+msgctxt "#30010"
+msgid "Download speed: %(speed)s"
+msgstr "Скорость загрузки: %(speed)s"
+
+msgctxt "#30011"
+msgid "Processed: %(value)s"
+msgstr "Обработано: %(value)s"
+
+msgctxt "#30012"
+msgid "Bitrate: %(value)s"
+msgstr "Битрейт: %(value)s"
+
+msgctxt "#30013"
+msgid "File not found"
+msgstr "Файл не найден"
+
+msgctxt "#30014"
+msgid "The file exists"
+msgstr "Файл существует"
+
+msgctxt "#30015"
+msgid ""
+"Retry downloading the file?\n"
+"The existing file will be overwritten."
+msgstr ""
+"Повторить скачивание файла?\n"
+"Существующий файл будет затерт."
+
+msgctxt "#30016"
+msgid "Select quality"
+msgstr "Выберете качество"
+
+msgctxt "#30017"
+msgid "144p (low)"
+msgstr "144p (низкое)"
+
+msgctxt "#30018"
+msgid "240p (low)"
+msgstr "240p (низкое)"
+
+msgctxt "#30019"
+msgid "360p (low)"
+msgstr "360p (низкое)"
+
+msgctxt "#30020"
+msgid "480p (medium)"
+msgstr "480p (среднее)"
+
+msgctxt "#30021"
+msgid "720p (HD)"
+msgstr ""
+
+msgctxt "#30022"
+msgid "1080p (Full HD)"
+msgstr ""
+
+msgctxt "#30023"
+msgid "1440p (Quad HD)"
+msgstr ""
+
+msgctxt "#30024"
+msgid "2160p (4K Ultra HD)"
+msgstr ""
+
+msgctxt "#30025"
+msgid "Best quality available"
+msgstr "Лучшее доступное качество"
+
+msgctxt "#30026"
+msgid "Audio only"
+msgstr "Только аудио"
+
+msgctxt "#30027"
+msgid "Video only"
+msgstr "Только видео"
+
+msgctxt "#30028"
+msgid "Stream (HLS)"
+msgstr "Поток (HLS)"
+
+msgctxt "#30029"
+msgid "Stream (DASH)"
+msgstr "Поток (DASH)"
+
+#~ msgctxt "#30000"
+#~ msgid "Items per page"
+#~ msgstr "Элементов на странице"
+
+#~ msgctxt "#30001"
+#~ msgid "Enable Web UI"
+#~ msgstr "Включить веб интерфейс"
+
+#~ msgctxt "#30002"
+#~ msgid "Host"
+#~ msgstr "Хост"
+
+#~ msgctxt "#30003"
+#~ msgid "Port"
+#~ msgstr "Порт"
+
+#~ msgctxt "#30004"
+#~ msgid "Phone"
+#~ msgstr "Телефон"
+
+#~ msgctxt "#30005"
+#~ msgid "Services"
+#~ msgstr "Сервисы"
+
+#~ msgctxt "#30007"
+#~ msgid "144p (tiny)"
+#~ msgstr "144p (наихудшее)"
+
+#~ msgctxt "#30013"
+#~ msgid "1440p (2K)"
+#~ msgstr "1440p (2K)"
+
+#~ msgctxt "#30015"
+#~ msgid "HLS (HTTP Live Streaming)"
+#~ msgstr "HLS (HTTP-трансляция в прямом эфире)"
+
+#~ msgctxt "#30016"
+#~ msgid "DASH (Dynamic Adaptive Streaming over HTTP)"
+#~ msgstr "DASH (динамическая адаптивная потоковая передача по HTTP)"
+
+#~ msgctxt "#30040"
+#~ msgid "Success"
+#~ msgstr "Успешно"
+
+#~ msgctxt "#30041"
+#~ msgid "Error"
+#~ msgstr "Ошибка"
+
+#~ msgctxt "#30050"
+#~ msgid "Login"
+#~ msgstr "Войти"
+
+#~ msgctxt "#30051"
+#~ msgid "Logout"
+#~ msgstr "Выйти"
+
+#~ msgctxt "#30052"
+#~ msgid "Subscriptions"
+#~ msgstr "Подписки"
+
+#~ msgctxt "#30053"
+#~ msgid "Add to homepage"
+#~ msgstr "Добавить на главную"
+
+#~ msgctxt "#30054"
+#~ msgid "Playlist added"
+#~ msgstr "Плейлист добавлен"
+
+#~ msgctxt "#30101"
+#~ msgid "Subscriptions in the Boosty.to service"
+#~ msgstr "Подписки в сервисе Boosty.to"
+
+#~ msgctxt "#30102"
+#~ msgid "Boosty: Authentication Error"
+#~ msgstr "Boosty: Ошибка аутентификации"
+
+#~ msgctxt "#30103"
+#~ msgid "Display only content available to me"
+#~ msgstr "Отображать только доступный мне контент"

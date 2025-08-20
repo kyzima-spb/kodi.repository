@@ -8,8 +8,8 @@ import typing as t
 
 
 try:
-    from kodi_useful import current_addon
-    logger = current_addon.logger
+    from kodi_useful import Addon
+    logger = Addon.get_instance('script.module.yt-dlp').logger
 except ImportError:
     import logging
     logger = logging.getLogger(__name__)
@@ -96,7 +96,6 @@ def read_metadata(filename: t.Union[str, pathlib.Path]) -> t.Dict[str, t.Any]:
             stderr=subprocess.PIPE,
         )
         data = json.loads(output)
-        logger.debug(data)
         return data
     except subprocess.CalledProcessError as err:
         logger.error(f'ffprobe error: {err.stderr.strip()}')
@@ -160,7 +159,6 @@ def write_metadata(
             *itertools.chain(*input_files, *map_args, *ffmpeg_args),
             str(output_file),
         ])
-        logger.debug(ffmpeg_args)
         output_file.rename(input_file)
     except FFMpegError as err:
         logger.error(str(err))
@@ -178,19 +176,4 @@ if __name__ == '__main__':
         sys.exit(1)
 
     filename = sys.argv[1]
-    # print(read_metadata(filename))
-    # print(convert_thumbnail(filename))
-
-    # ffmpeg = FFMpeg(progress_hook=print)
-    #
-    # try:
-    #     ffmpeg(['-i', filename, '-y', 'progress.mp4'])
-    # except KeyboardInterrupt:
-    #     ffmpeg.stop()
-
-    write_metadata(
-        sys.argv[1],
-        metadata={'title': 'Тестовое название 123', 'date': 2025},
-        thumbnail='https://i.okcdn.ru/videoPreview?id=8848243165805&type=39&idx=3&tkn=nDMJ1QwBhEr3jF7MsV7S0C-TFw4',
-        # thumbnail='cover.jpg',
-    )
+    print(read_metadata(filename))

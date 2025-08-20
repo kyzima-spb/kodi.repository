@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="script.module.yt-dlp" name="yt_dlp" version="2025.7.21-1" provider-name="Kirill Vercetti">
+<addon id="script.module.yt-dlp" name="yt_dlp" version="2025.7.21-3" provider-name="Kirill Vercetti">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <import addon="script.module.kodi_useful" version="0.0.13"/>
