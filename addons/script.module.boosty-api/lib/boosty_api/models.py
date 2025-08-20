@@ -1,10 +1,13 @@
+from collections import UserDict
 from dataclasses import asdict, dataclass, field, InitVar
-from datetime import date, time
+from datetime import date, datetime, time
+from functools import cached_property
+import itertools
 import json
 import typing as t
 
-from .enums import MediaType
-from .utils import extract_images, extract_text, to_timestamp
+from .enums import MediaType, MEDIA_TYPE_MAP
+from .utils import extract_content, extract_images, extract_text, to_timestamp
 
 
 @dataclass
@@ -29,11 +32,16 @@ class MediaCollection(Collection):
         }
 
         for media_post in super().__iter__():
+            media_type_counters = {
+                i: itertools.count()
+                for i in itertools.chain(media_type_map.values(), (MediaType.UNKNOWN,))
+            }
             post = media_post['post']
             post['teaser'] = Teaser(post['teaser'])
 
-            for media in media_post['media']:
+            for idx, media in enumerate(media_post['media']):
                 media['type'] = media_type_map.get(media['type'], MediaType.UNKNOWN)
+                media['idx'] = next(media_type_counters[media['type']])
 
                 if media['type'] == MediaType.AUDIO:
                     media['url'] += post['signedQuery']
@@ -66,6 +74,48 @@ class Filter:
             for k, v in asdict(self).items()
             if v is not None
         }
+
+
+class Post(UserDict):
+    def _get_datetime(self, key) -> t.Optional[datetime]:
+        if key in self.data:
+            return datetime.fromtimestamp(self.data[key])
+        return None
+
+    @cached_property
+    def content(self) -> t.Sequence[t.Dict[str, t.Any]]:
+        """Extracts content from a list with styles for Boosty."""
+        return extract_content(self.data['data'])
+
+    @cached_property
+    def created_at(self) -> t.Optional[datetime]:
+        return self._get_datetime('createdAt')
+
+    @cached_property
+    def publish_time(self) -> t.Optional[datetime]:
+        return self._get_datetime('publishTime')
+
+    @cached_property
+    def teaser(self) -> 'Teaser':
+        return Teaser(self.data.get('teaser', []))
+
+    @cached_property
+    def text_content(self) -> str:
+        """Extracts text from a list with styles for Boosty."""
+        return extract_text(self.data['data'])
+
+    @cached_property
+    def updated_at(self) -> t.Optional[datetime]:
+        return self._get_datetime('updatedAt')
+
+    def iter_media(self, media_type: MediaType = MediaType.ALL):
+        for content in self.data['data']:
+            content_type = MEDIA_TYPE_MAP.get(content['type'])
+            if content_type and (media_type == MediaType.ALL or media_type == content_type):
+                yield content
+
+    def get_media(self, media_type: MediaType = MediaType.ALL):
+        return list(self.iter_media(media_type))
 
 
 @dataclass

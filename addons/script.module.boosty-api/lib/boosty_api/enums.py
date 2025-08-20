@@ -10,6 +10,13 @@ class MediaType(str, enum.Enum):
     UNKNOWN = 'unknown'
 
 
+MEDIA_TYPE_MAP = {
+    'ok_video': MediaType.VIDEO,
+    'image': MediaType.IMAGE,
+    'audio_file': MediaType.AUDIO,
+}
+
+
 class Quality(str, enum.Enum):
     """Video quality."""
     SD_144 = 'tiny'

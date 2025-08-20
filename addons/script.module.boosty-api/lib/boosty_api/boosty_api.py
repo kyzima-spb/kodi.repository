@@ -13,8 +13,13 @@ from requests.adapters import HTTPAdapter
 
 from .enums import MediaType
 from .exceptions import AuthError, BoostyError, BoostyApiError, LoginRequired
-from .models import Collection, Filter, MediaCollection
+from .models import Collection, Filter, MediaCollection, Post
 from .utils import cookie_jar_to_list, set_cookies_from_list
+
+
+__all__ = (
+    'BoostyApi',
+)
 
 
 DEFAULT_USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
@@ -85,6 +90,7 @@ class BoostyApi:
         self.session = self._get_session()
 
         self.get_media = partial(get_media, self)
+        self.get_post = partial(get_post, self)
         self.get_posts = partial(get_posts, self)
         self.get_profile = partial(get_profile, self)
         self.get_profile_by_url = partial(get_profile_by_url, self)
@@ -316,6 +322,15 @@ class BoostyApi:
         })
 
 
+def resolve_username(boosty_session: BoostyApi, username: str = '') -> str:
+    if not username:
+        user = boosty_session.current_user
+        if user is None:
+            raise ValueError('Username is required')
+        return user['name']
+    return username
+
+
 def get_media(
     boosty_session: BoostyApi,
     username: str = '',
@@ -339,14 +354,7 @@ def get_media(
         start_date (date): Return from the specified date.
         end_date (date): Return by the specified date.
     """
-    if not username:
-        user = boosty_session.current_user
-
-        if user is None:
-            raise ValueError('Username is required')
-
-        username = user['name']
-
+    username = resolve_username(boosty_session, username)
     filter_data = Filter(
         limit=limit,
         offset=offset,
@@ -367,18 +375,31 @@ def get_media(
         offset=response_dict['extra']['offset'],
         is_last=response_dict['extra']['isLast'],
         iterable=response_dict['data']['mediaPosts'],
+        extra={
+            'username': username,
+        },
     )
+
+
+def get_post(
+    boosty_session: BoostyApi,
+    post_id: str,
+    username: str = '',
+) -> Post:
+    """Returns the user post with the passed identifier."""
+    username = resolve_username(boosty_session, username)
+    return Post(**boosty_session.request('get', f'/blog/{username}/post/{post_id}'))
 
 
 def get_posts(
     boosty_session: BoostyApi,
     username: str = '',
     limit: t.Optional[int] = None,
-    offset: str = '',
+    offset: t.Optional[str] = None,
     only_allowed: bool = False,
     start_date: t.Optional[date] = None,
     end_date: t.Optional[date] = None,
-) -> t.Dict[str, t.Any]:
+) -> Collection:
     """
     Returns blog posts of the user.
 
@@ -391,15 +412,7 @@ def get_posts(
         start_date (date): Return from the specified date.
         end_date (date): Return by the specified date.
     """
-
-    if not username:
-        user = boosty_session.current_user
-
-        if user is None:
-            raise ValueError('Username is required')
-
-        username = user['name']
-
+    username = resolve_username(boosty_session, username)
     filter_data = Filter(
         limit=limit,
         offset=offset,
@@ -409,7 +422,17 @@ def get_posts(
     )
     params = filter_data.to_dict(remap_keys={'only_allowed': 'is_only_allowed'})
 
-    return boosty_session.request('get', f'/blog/{username}/post/', params=params)
+    response_dict = boosty_session.request('get', f'/blog/{username}/post/', params=params)
+
+    return Collection(
+        limit=limit,
+        offset=response_dict['extra']['offset'],
+        is_last=response_dict['extra']['isLast'],
+        iterable=[Post(**i) for i in response_dict['data']],
+        extra={
+            'username': username,
+        },
+    )
 
 
 def get_profile(boosty_session: BoostyApi, username: str) -> t.Dict[str, t.Any]:
