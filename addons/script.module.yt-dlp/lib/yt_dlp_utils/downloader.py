@@ -1,7 +1,5 @@
 from functools import partial
-import glob
 import os
-import pathlib
 import re
 import tempfile
 import typing as t
@@ -32,11 +30,11 @@ class YTDownloader:
         self.download_dir = download_dir
 
     def _clear_temp_files(self, output_file: str) -> None:
-        pathlib.Path(output_file).unlink(missing_ok=True)
+        fs.remove(output_file)
 
-        for path in (pathlib.Path(i) for i in glob.iglob(f'{output_file}.*')):
-            if path.suffix in {'.part', '.ytdl', '.frag', '.temp', '.tmp', '.jpg', '.png', '.json'}:
-                path.unlink(missing_ok=True)
+        for path in fs.iglob(f'{output_file}.*'):
+            if fs.get_suffix(path) in {'.part', '.ytdl', '.frag', '.temp', '.tmp', '.jpg', '.png', '.json'}:
+                fs.remove(path)
 
     def _format_size(self, size: int, units: t.Tuple[str, ...]) -> str:
         idx = 0
@@ -100,7 +98,7 @@ class YTDownloader:
     def notification(self, message: str, icon: str = xbmcgui.NOTIFICATION_INFO) -> None:
         xbmcgui.Dialog().notification(self._localize('Download status'), message, icon)
 
-    def start(
+    def download(
         self,
         url: str,
         output_file: str,
@@ -109,23 +107,9 @@ class YTDownloader:
         thumbnail: t.Optional[str] = None,
         headers: t.Optional[t.Dict[str, str]] = None,
     ) -> None:
-        progress_dialog = xbmcgui.DialogProgress()
-        ydl_opts = {
-            'quiet': True,
-            'noprogress': True,
-            'progress_hooks': [
-                partial(self._download_progress_hook, progress_dialog=progress_dialog),
-            ],
-            'http_headers': headers or {},
-        }
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            target_file = yt_dlp.utils.sanitize_path(
-                os.path.join(
-                    self.download_dir, ydl.evaluate_outtmpl(output_file, info, sanitize=False)
-                )
-            )
+        """Downloads a file and embeds metadata."""
+        info = self.extract_info(url, output_file, headers)
+        target_file = info['target_file']
 
         if fs.exists(target_file) and not xbmcgui.Dialog().yesno(
             self._localize('The file exists'),
@@ -159,14 +143,11 @@ class YTDownloader:
         if thumbnail is None and 'thumbnail' in info:
             thumbnail = info['thumbnail']
 
+        progress_dialog = xbmcgui.DialogProgress()
+
         with tempfile.TemporaryDirectory() as d:
             temp_link = os.path.join(d, str(uuid.uuid4()))
             fs.symlink(target_dir, temp_link)
-
-            self.addon.logger.debug(format_string)
-
-            ydl_opts['outtmpl'] = os.path.join(temp_link, f'{uuid.uuid4()}.%(ext)s')
-            ydl_opts['format'] = format_string
 
             try:
                 progress_dialog.create(
@@ -174,6 +155,17 @@ class YTDownloader:
                     self._localize('Preparing to download file...'),
                 )
                 progress_dialog.update(0, '')
+
+                ydl_opts = {
+                    'quiet': True,
+                    'noprogress': True,
+                    'outtmpl': os.path.join(temp_link, f'{uuid.uuid4()}.%(ext)s'),
+                    'format': format_string,
+                    'progress_hooks': [
+                        partial(self._download_progress_hook, progress_dialog=progress_dialog),
+                    ],
+                    'http_headers': headers or {},
+                }
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=True)
@@ -190,7 +182,6 @@ class YTDownloader:
                     read_metadata(temp_file).get('format', {}).get('duration')
                 )
                 duration_ms = None if duration is None else int(float(duration) * 1_000_000)
-
                 write_metadata(
                     temp_file,
                     metadata=metadata,
@@ -215,3 +206,25 @@ class YTDownloader:
             #     self.notification(str(err), xbmcgui.NOTIFICATION_ERROR)
             finally:
                 progress_dialog.close()
+
+    def extract_info(
+        self,
+        url: str,
+        output_file: str,
+        headers: t.Optional[t.Dict[str, str]] = None,
+    ) -> t.Dict[str, t.Any]:
+        ydl_opts = {
+            'quiet': True,
+            'noprogress': True,
+            'http_headers': headers or {},
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            info['target_file'] = yt_dlp.utils.sanitize_path(
+                os.path.join(
+                    self.download_dir, ydl.evaluate_outtmpl(output_file, info, sanitize=False)
+                )
+            )
+
+        return info
