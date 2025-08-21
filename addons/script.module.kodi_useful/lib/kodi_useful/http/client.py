@@ -1,9 +1,8 @@
 from functools import wraps
-from datetime import datetime
+import string
 import xml.etree.ElementTree as et
-import re
 import typing as t
-from urllib.parse import urljoin, urlparse, urlunparse, parse_qsl, urlencode
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
 try:
     import htmlement
@@ -75,15 +74,32 @@ class Session(requests.Session):
         self,
         method: t.Union[str, bytes],
         url: t.Union[str, bytes],
+        params: t.Dict[str, t.Any] = None,
         **kwargs: t.Any,
     ) -> requests.Response:
+        """
+        Выполняет HTTP запрос к серверу.
+
+        В URL адресе можно использовать именованные плейсхолдеры: /user/{user_id},
+        а значения для плейсхолдеров передавать в словаре params: {'user_id': 1, 'extended': 1}
+        Значения, для которых не заданы плейсхолдеры - будут использованы как параметры строки запроса.
+        """
         if bool(urlparse(url).netloc):
             return super().request(method, url, **kwargs)
 
         if self._base_url is not None:
             url = '%s/%s' % (self._base_url.rstrip('/'), url.lstrip('/'))
 
-        return super().request(method, url, **kwargs)
+        if params is not None:
+            formatter = string.Formatter()
+
+            url = url.format(**{
+                field_name: params.pop(field_name)
+                for _, field_name, _, _ in formatter.parse(url)
+                if field_name
+            })
+
+        return super().request(method, url, params=params, **kwargs)
 
     def parse_html(
         self,
