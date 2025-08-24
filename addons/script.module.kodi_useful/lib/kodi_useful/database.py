@@ -5,12 +5,14 @@ import datetime
 from functools import cached_property, lru_cache, partial, wraps
 import logging
 import json
-import sqlite3
+import os
 import re
+import sqlite3
 import typing as t
 from typing import Any, Dict, Tuple, Union
 import uuid
 
+from . import fs
 from .exceptions import ObjectNotFound
 
 
@@ -84,6 +86,8 @@ class Connection:
 
     @cached_property
     def connection(self) -> sqlite3.Connection:
+        fs.makedirs(os.path.dirname(self.path))
+
         conn = sqlite3.connect(self.path, detect_types=sqlite3.PARSE_DECLTYPES)
 
         if self.echo:
