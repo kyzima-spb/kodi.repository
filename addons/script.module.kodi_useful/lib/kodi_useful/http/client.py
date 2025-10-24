@@ -11,6 +11,8 @@ except:
 
 import requests
 
+from ..exceptions import ValidationError
+
 
 def parse_html(
     html: str,
@@ -59,7 +61,7 @@ class ElementProxy:
 class Session(requests.Session):
     def __init__(
         self,
-        base_url: str,
+        base_url: t.Optional[str] = None,
         headers=None,
     ):
         super().__init__()
@@ -104,11 +106,17 @@ class Session(requests.Session):
     def parse_html(
         self,
         url: t.Union[str, bytes],
-        tag: str,
+        tag: str = '',
         *,
         attrs: t.Optional[t.Dict[str, str]] = None,
         method: t.Union[str, bytes] = 'get',
         **kwargs: t.Any,
     ) -> 'ElementProxy':
         response = self.request(method, url, **kwargs)
+
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as err:
+            raise ValidationError('%s for url: %s' % (response.reason, response.url)) from err
+
         return parse_html(response.text, tag, attrs)
