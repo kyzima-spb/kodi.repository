@@ -17,7 +17,5 @@ class safe_datetime(datetime.datetime):
                 raise ValueError("parsedate_tz returned None")
 
 
-try:
-    datetime.datetime.strptime('2025', '%Y')
-except TypeError:
+if not issubclass(datetime.datetime, safe_datetime):
     datetime.datetime = safe_datetime

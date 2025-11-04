@@ -21,8 +21,6 @@ __all__ = ('select', 'Connection', 'Model')
 
 PrimaryKey = Union[Any, Tuple[Any, ...], Dict[str, Any]]
 
-logger = logging.getLogger(__name__)
-
 sqlite3.register_adapter(datetime.date, lambda v: v.isoformat())
 sqlite3.register_adapter(datetime.datetime, lambda v: v.isoformat())
 sqlite3.register_adapter(dict, lambda v: json.dumps(v))

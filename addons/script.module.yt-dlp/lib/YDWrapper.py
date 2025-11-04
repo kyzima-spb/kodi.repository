@@ -14,7 +14,8 @@ class safe_datetime(datetime.datetime):
         return datetime.datetime(*(time.strptime(date_string, fmt)[:6]))
 
 
-datetime.datetime = safe_datetime
+if 'safe' not in datetime.datetime.__name__:
+    datetime.datetime = safe_datetime
 
 
 class Quality(enum.IntEnum):
