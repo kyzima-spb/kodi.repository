@@ -2,8 +2,7 @@ import atexit
 from contextlib import contextmanager
 from dataclasses import dataclass, fields
 import datetime
-from functools import cached_property, lru_cache, partial, wraps
-import logging
+from functools import cached_property, lru_cache, partial
 import json
 import os
 import re
@@ -12,7 +11,7 @@ import typing as t
 from typing import Any, Dict, Tuple, Union
 import uuid
 
-from . import fs
+from . import current_addon, fs
 from .exceptions import ObjectNotFound
 
 
@@ -89,7 +88,7 @@ class Connection:
         conn = sqlite3.connect(self.path, detect_types=sqlite3.PARSE_DECLTYPES)
 
         if self.echo:
-            conn.set_trace_callback(logger.debug)
+            conn.set_trace_callback(current_addon.logger.debug)
 
         conn.execute('PRAGMA foreign_keys = ON')
         atexit.register(conn.close)
