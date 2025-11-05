@@ -265,7 +265,9 @@ class Router:
             if p.metadata.scope == Scope.QUERY and p.required and p.name not in kwargs:
                 raise ValueError(f'Missing value for required parameter {p.name!r} in query string.')
 
-        return '%s?%s' % (base_url, urlencode(kwargs))
+        return '%s?%s' % (base_url, urlencode({
+            k: v for k, v in kwargs.items() if v is not None
+        }))
 
 
 router = Router()
