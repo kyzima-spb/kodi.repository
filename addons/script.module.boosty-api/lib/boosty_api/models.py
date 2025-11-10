@@ -2,7 +2,6 @@ from collections import UserDict
 from dataclasses import asdict, dataclass, field, InitVar
 from datetime import date, datetime, time
 from functools import cached_property
-import itertools
 import json
 import typing as t
 
@@ -16,37 +15,9 @@ class Collection:
     offset: t.Union[int, str]
     is_last: bool
     iterable: t.Sequence[t.Any]
-    extra: t.Dict[str, t.Any] = field(default_factory=dict)
 
     def __iter__(self):
         return iter(self.iterable)
-
-
-@dataclass
-class MediaCollection(Collection):
-    def __iter__(self):
-        media_type_map = {
-            'ok_video': MediaType.VIDEO,
-            'image': MediaType.IMAGE,
-            'audio_file': MediaType.AUDIO,
-        }
-
-        for media_post in super().__iter__():
-            media_type_counters = {
-                i: itertools.count()
-                for i in itertools.chain(media_type_map.values(), (MediaType.UNKNOWN,))
-            }
-            post = media_post['post']
-            post['teaser'] = Teaser(post['teaser'])
-
-            for idx, media in enumerate(media_post['media']):
-                media['type'] = media_type_map.get(media['type'], MediaType.UNKNOWN)
-                media['idx'] = next(media_type_counters[media['type']])
-
-                if media['type'] == MediaType.AUDIO:
-                    media['url'] += post['signedQuery']
-
-                yield {'post': post, **media}
 
 
 @dataclass
@@ -76,20 +47,11 @@ class Filter:
         }
 
 
-class Post(UserDict):
+class BasePost(UserDict):
     def _get_datetime(self, key) -> t.Optional[datetime]:
         if key in self.data:
             return datetime.fromtimestamp(self.data[key])
         return None
-
-    @cached_property
-    def content(self) -> t.Sequence[t.Dict[str, t.Any]]:
-        """Extracts content from a list with styles for Boosty."""
-        return extract_content(self.data['data'])
-
-    @cached_property
-    def created_at(self) -> t.Optional[datetime]:
-        return self._get_datetime('createdAt')
 
     @cached_property
     def publish_time(self) -> t.Optional[datetime]:
@@ -98,6 +60,17 @@ class Post(UserDict):
     @cached_property
     def teaser(self) -> 'Teaser':
         return Teaser(self.data.get('teaser', []))
+
+
+class Post(BasePost):
+    @cached_property
+    def content(self) -> t.Sequence[t.Dict[str, t.Any]]:
+        """Extracts content from a list with styles for Boosty."""
+        return extract_content(self.data['data'])
+
+    @cached_property
+    def created_at(self) -> t.Optional[datetime]:
+        return self._get_datetime('createdAt')
 
     @cached_property
     def text_content(self) -> str:
@@ -109,13 +82,45 @@ class Post(UserDict):
         return self._get_datetime('updatedAt')
 
     def iter_media(self, media_type: MediaType = MediaType.ALL):
-        for content in self.data['data']:
-            content_type = MEDIA_TYPE_MAP.get(content['type'])
-            if content_type and (media_type == MediaType.ALL or media_type == content_type):
-                yield content
+        for media in filter(lambda c: c['type'] in MEDIA_TYPE_MAP, self.data['data']):
+            result = Media(**media, post=self)
 
-    def get_media(self, media_type: MediaType = MediaType.ALL):
-        return list(self.iter_media(media_type))
+            if media_type == MediaType.ALL or media_type == result.type:
+                yield result
+
+    def get_media(self, media_type: MediaType = MediaType.ALL) -> Collection:
+        return Collection(
+            iterable=list(self.iter_media(media_type)),
+            limit=-1,
+            offset=-1,
+            is_last=True,
+        )
+
+
+class Media(UserDict):
+    @cached_property
+    def post(self) -> t.Optional[BasePost]:
+        return self.data.get('post')
+
+    @cached_property
+    def type(self) -> MediaType:
+        return MEDIA_TYPE_MAP.get(self.data['type'], MediaType.UNKNOWN)
+
+    @cached_property
+    def url(self) -> str:
+        post = self.post
+
+        if post and self.type == MediaType.AUDIO:
+            return self.data['url'] + post['signedQuery']
+
+        return self.data['url']
+
+    @cached_property
+    def username(self) -> t.Optional[str]:
+        return self.data.get(
+            'username',
+            self.post['user']['blogUrl'] if isinstance(self.post, Post) else None
+        )
 
 
 @dataclass

@@ -13,7 +13,7 @@ from requests.adapters import HTTPAdapter
 
 from .enums import MediaType
 from .exceptions import AuthError, BoostyError, BoostyApiError, LoginRequired
-from .models import Collection, Filter, MediaCollection, Post
+from .models import BasePost, Collection, Filter, Media, Post
 from .utils import cookie_jar_to_list, set_cookies_from_list
 
 
@@ -90,6 +90,7 @@ class BoostyApi:
         self.session = self._get_session()
 
         self.get_media = partial(get_media, self)
+        self.get_media_by_id = partial(get_media_by_id, self)
         self.get_post = partial(get_post, self)
         self.get_posts = partial(get_posts, self)
         self.get_profile = partial(get_profile, self)
@@ -340,7 +341,7 @@ def get_media(
     only_allowed: bool = False,
     start_date: t.Optional[date] = None,
     end_date: t.Optional[date] = None,
-) -> MediaCollection:
+) -> Collection:
     """
     Returns uploaded media files of the user.
 
@@ -370,15 +371,35 @@ def get_media(
 
     response_dict = boosty_session.request('get', f'/blog/{username}/media_album/', params=params)
 
-    return MediaCollection(
+    def iter_media_posts():
+        for media_post in response_dict['data']['mediaPosts']:
+            post = BasePost(**media_post['post'])
+
+            for media in media_post['media']:
+                yield Media(**media, post=post, username=username)
+
+    return Collection(
         limit=limit,
         offset=response_dict['extra']['offset'],
         is_last=response_dict['extra']['isLast'],
-        iterable=response_dict['data']['mediaPosts'],
-        extra={
-            'username': username,
-        },
+        iterable=list(iter_media_posts()),
     )
+
+
+def get_media_by_id(
+    boosty_session: BoostyApi,
+    post_id: str,
+    media_id: str,
+    username: str = '',
+) -> t.Dict[str, t.Any]:
+    """Returns the user media file with the passed identifier."""
+    post = get_post(boosty_session, post_id, username)
+
+    for media in post.iter_media():
+        if media['id'] == media_id:
+            return media
+
+    raise BoostyError(f'Media file with ID {media_id} not found.')
 
 
 def get_post(
