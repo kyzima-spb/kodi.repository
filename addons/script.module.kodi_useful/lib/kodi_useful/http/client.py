@@ -86,10 +86,7 @@ class Session(requests.Session):
         а значения для плейсхолдеров передавать в словаре params: {'user_id': 1, 'extended': 1}
         Значения, для которых не заданы плейсхолдеры - будут использованы как параметры строки запроса.
         """
-        if bool(urlparse(url).netloc):
-            return super().request(method, url, **kwargs)
-
-        if self._base_url is not None:
+        if not urlparse(url).netloc and self._base_url is not None:
             url = '%s/%s' % (self._base_url.rstrip('/'), url.lstrip('/'))
 
         if params is not None:
@@ -101,7 +98,10 @@ class Session(requests.Session):
                 if field_name
             })
 
-        return super().request(method, url, params=params, **kwargs)
+        response = super().request(method, url, params=params, **kwargs)
+        response.raise_for_status()
+
+        return response
 
     def parse_html(
         self,
