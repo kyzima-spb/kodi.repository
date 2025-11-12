@@ -15,6 +15,7 @@ class Collection:
     offset: t.Union[int, str]
     is_last: bool
     iterable: t.Sequence[t.Any]
+    extra: t.Dict[str, t.Any] = field(default_factory=dict)
 
     def __iter__(self):
         return iter(self.iterable)
