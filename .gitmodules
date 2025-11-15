@@ -10,3 +10,6 @@
 [submodule "addons/plugin.vk.com"]
 	path = addons/plugin.vk.com
 	url = git@github.com:kyzima-spb/plugin.vk.com.git
+[submodule "addons/plugin.video.smotrim.ru"]
+	path = addons/plugin.video.smotrim.ru
+	url = git@github.com:kyzima-spb/plugin.video.smotrim.ru.git
