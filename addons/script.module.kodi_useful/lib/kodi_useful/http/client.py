@@ -1,8 +1,7 @@
-from functools import wraps
 import string
 import xml.etree.ElementTree as et
 import typing as t
-from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
+from urllib.parse import urlparse
 
 try:
     import htmlement
@@ -10,7 +9,9 @@ except:
     pass
 
 import requests
+from requests_cache import CachedSession
 
+from ..core import current_addon
 from ..exceptions import ValidationError
 
 
@@ -58,24 +59,31 @@ class ElementProxy:
         return (self.__class__(i) for i in self._element.iterfind(xpath))
 
 
-class Session(requests.Session):
+class Session(CachedSession):
     def __init__(
         self,
         base_url: t.Optional[str] = None,
-        headers=None,
+        cache: t.Optional[t.Dict[str, t.Any]] = None,
+        headers: t.Optional[t.Dict[str, t.Any]] = None,
+        params: t.Optional[t.Dict[str, t.Any]] = None,
     ):
-        super().__init__()
+        cache_kwargs = cache or {}
+        cache_kwargs.setdefault('cache_name', current_addon.get_data_path('http_cache'))
+        cache_kwargs.setdefault('expire_after', 0)
+
+        super().__init__(**cache_kwargs)
 
         self._base_url = base_url
+        self._global_params = params
 
         if headers is not None:
             self.headers.update(headers)
 
-    @wraps(requests.Session.request)
     def request(
         self,
         method: t.Union[str, bytes],
         url: t.Union[str, bytes],
+        *,
         params: t.Dict[str, t.Any] = None,
         **kwargs: t.Any,
     ) -> requests.Response:
@@ -88,6 +96,11 @@ class Session(requests.Session):
         """
         if not urlparse(url).netloc and self._base_url is not None:
             url = '%s/%s' % (self._base_url.rstrip('/'), url.lstrip('/'))
+
+        if self._global_params and params:
+            params = {**self._global_params, **params}
+        else:
+            params = params or self._global_params
 
         if params is not None:
             formatter = string.Formatter()
