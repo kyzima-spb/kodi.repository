@@ -1,3 +1,4 @@
+import re
 import string
 import xml.etree.ElementTree as et
 import typing as t
@@ -9,7 +10,7 @@ except:
     pass
 
 import requests
-from requests_cache import CachedSession
+from cache_requests import CachedSession
 
 from ..core import current_addon
 from ..exceptions import ValidationError
@@ -78,6 +79,27 @@ class Session(CachedSession):
 
         if headers is not None:
             self.headers.update(headers)
+
+    def download_file(
+        self,
+        url: str,
+        chunk_size: int = 65536,
+        headers: t.Optional[t.Dict[str, t.Any]] = None,
+    ) -> str:
+        """Downloads a file from the specified address."""
+        result = urlparse(url)
+        sanitize_re = re.compile(r'["*:;<>?\\|&/]')
+        path = current_addon.get_data_path(
+            'requests', 'downloads', result.netloc,
+            *(sanitize_re.sub('', s) for s in result.path.split('/') if s),
+        )
+        response = self.get(url, stream=True, expire_after=0, headers=headers)
+
+        with open(path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size):
+                f.write(chunk)
+
+        return path
 
     def request(
         self,
