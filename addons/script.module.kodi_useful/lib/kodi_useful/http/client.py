@@ -1,4 +1,6 @@
-import re
+import hashlib
+import mimetypes
+import os
 import string
 import xml.etree.ElementTree as et
 import typing as t
@@ -12,8 +14,15 @@ except:
 import requests
 from cache_requests import CachedSession
 
+from .utils import get_content_disposition, split_pairs
 from ..core import current_addon
 from ..exceptions import ValidationError
+
+
+__all__ = (
+    'parse_html',
+    'Session',
+)
 
 
 def parse_html(
@@ -69,7 +78,7 @@ class Session(CachedSession):
         params: t.Optional[t.Dict[str, t.Any]] = None,
     ):
         cache_kwargs = cache or {}
-        cache_kwargs.setdefault('cache_name', current_addon.get_data_path('http_cache'))
+        cache_kwargs.setdefault('cache_name', current_addon.get_data_path('requests', 'http_cache'))
         cache_kwargs.setdefault('expire_after', 0)
 
         super().__init__(**cache_kwargs)
@@ -83,23 +92,40 @@ class Session(CachedSession):
     def download_file(
         self,
         url: str,
+        *,
         chunk_size: int = 65536,
+        no_cache: bool = False,
         headers: t.Optional[t.Dict[str, t.Any]] = None,
+        stream: bool = False,
+        translate: bool = False,
+        **kwargs: t.Any,
     ) -> str:
-        """Downloads a file from the specified address."""
-        result = urlparse(url)
-        sanitize_re = re.compile(r'["*:;<>?\\|&/]')
-        path = current_addon.get_data_path(
-            'requests', 'downloads', result.netloc,
-            *(sanitize_re.sub('', s) for s in result.path.split('/') if s),
-        )
-        response = self.get(url, stream=True, expire_after=0, headers=headers)
+        """Downloads a file from the given URL address."""
+        response = self.head(url, expire_after=0, headers=headers, **kwargs)
 
-        with open(path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size):
-                f.write(chunk)
+        if 'Content-Disposition' in response.headers:
+            _, ext = os.path.splitext(
+                get_content_disposition(response.headers['Content-Disposition'])
+            )
+        elif 'Content-Type' in response.headers:
+            ext = mimetypes.guess_extension(response.headers['Content-Type'])
+        else:
+            ext = ''
 
-        return path
+        lookup = split_pairs(hashlib.sha256(url.encode('utf-8')).hexdigest())
+        lookup[-1] += ext
+        path = current_addon.get_data_path(*lookup)
+
+        if no_cache or not os.path.exists(path) or response.headers.get('Content-Length', 0) != os.stat(path).st_size:
+            response = self.get(url, stream=stream, expire_after=0, headers=headers, **kwargs)
+
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+
+            with open(path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size):
+                    f.write(chunk)
+
+        return current_addon.get_data_path(*lookup, translate=translate)
 
     def request(
         self,
