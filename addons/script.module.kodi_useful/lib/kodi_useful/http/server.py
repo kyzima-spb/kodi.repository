@@ -1,3 +1,4 @@
+from dataclasses import dataclass, fields, field, is_dataclass, MISSING
 from datetime import datetime
 from functools import cached_property, partial
 from http import server, HTTPStatus
@@ -20,10 +21,21 @@ if t.TYPE_CHECKING:
     from urllib.parse import SplitResult
 
 
+_F = t.TypeVar('_F', bound=t.Callable[..., t.Any])
+T = t.TypeVar('T')
+Headers = t.Dict[str, str]
 PathLike = t.Union[str, pathlib.Path]
+ResponseValue = t.Union[
+    'Response',
+    HTTPStatus,
+    t.Tuple[HTTPStatus, t.Union[str, bytes]],
+    t.Tuple[HTTPStatus, t.Union[str, bytes], Headers],
+]
+URLHandler = t.Dict[str, t.Callable[['HTTPRequestHandler'], ResponseValue]]
 
 
 __all__ = (
+    'validate',
     'HTTPRequestHandler',
     'HTTPError',
     'HTTPServer',
@@ -39,35 +51,87 @@ def guess_type(path: PathLike) -> str:
     return ctype
 
 
+def validate(schema: t.Type[T], payload: t.Dict[str, t.Any]) -> T:
+    if not is_dataclass(schema):
+        raise TypeError('The schema argument must be a dataclass.')
+
+    declared_fields = {f.name: f for f in fields(schema)}
+    errors = {}
+
+    for name, value in payload.items():
+        fld = declared_fields.pop(name, None)
+
+        if fld is None:
+            errors[name] = f'Missing field {name!r} in schema.'
+        else:
+            allowed_types = t.get_args(fld.type) or (fld.type,)
+
+            if not isinstance(value, allowed_types):
+                allowed_types_string = ', '.join(i.__name__ for i in allowed_types if i is not type(None))
+                errors[name] = f'Field {name!r} has an incompatible data type, requires: {allowed_types_string}.'
+
+    for name, fld in declared_fields.items():
+        if fld.default is MISSING and fld.default_factory is MISSING:
+            errors[name] = f'Field {name!r} is required.'
+
+    if errors:
+        raise ValidationError(errors=errors)
+
+    return t.cast(T, schema(**payload))
+
+
 class JSONEncoder(json.JSONEncoder):
-    def default(self, obj):
+    def default(self, obj: t.Any) -> t.Any:
         if isinstance(obj, datetime):
             return obj.isoformat()
         return super().default(obj)
 
 
-class Response(t.NamedTuple):
+@dataclass
+class Response:
     """Response object. Contains fields: response body, status, and headers."""
 
     status: int = HTTPStatus.OK
     body: t.Union[str, bytes] = b''
-    headers: t.Optional[t.Dict[str, str]] = None
+    headers: t.Optional[Headers] = None
 
     def get_body(self) -> bytes:
         if isinstance(self.body, bytes):
             return self.body
         return self.body.encode('utf-8')
 
-    def get_headers(self) -> t.Dict[str, str]:
-        return {} if self.headers is None else self.headers
+    def get_headers(self) -> Headers:
+        headers = self.headers or {}
+        headers['Content-Length'] = str(len(self.get_body()))
+        return headers
+
+
+@dataclass
+class JSONResponse(Response):
+    body: t.Any = ''
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.body, (str, bytes)):
+            try:
+                self.body = json.dumps(self.body, cls=JSONEncoder)
+            except TypeError as err:
+                raise HTTPError(
+                    HTTPStatus.BAD_REQUEST,
+                    'Passed value is not JSON serializable.',
+                ) from err
+
+    def get_headers(self) -> Headers:
+        headers = super().get_headers()
+        headers['Content-Type'] = 'application/json'
+        return headers
 
 
 class HTTPRequestHandler(server.BaseHTTPRequestHandler):
     def __init__(
         self,
         *args: t.Any,
-        url_handlers: t.Dict[str, t.Dict[str, t.Callable]],
-        root_dir: str,
+        url_handlers: t.Dict[str, URLHandler],
+        root_dir: PathLike,
         **kwargs: t.Any,
     ) -> None:
         self.url_handlers = url_handlers
@@ -111,7 +175,7 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
 
     def end_headers(self) -> None:
         self.send_headers({
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': self.headers.get('Origin', '*'),
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type, Authorization',
             'Access-Control-Allow-Credentials': 'true',
@@ -145,16 +209,27 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
         try:
             resp = handler(self)
 
-            if isinstance(resp, HTTPStatus):
-                resp = (resp,)
-
-            if not isinstance(resp, tuple):
+            if isinstance(resp, Response):
+                r = resp
+            elif isinstance(resp, HTTPStatus):
+                r = Response(status=resp)
+            elif isinstance(resp, tuple):
+                if len(resp) == 1:
+                    r = Response(status=resp[0])
+                elif len(resp) == 2:
+                    r = Response(status=resp[0], body=resp[1])
+                elif len(resp) == 3:
+                    r = Response(status=resp[0], body=resp[1], headers=resp[2])
+                else:
+                    return self.send_error(
+                        HTTPStatus.INTERNAL_SERVER_ERROR,
+                        'The response must be a tuple of one to three elements.'
+                    )
+            else:
                 return self.send_error(
                     HTTPStatus.INTERNAL_SERVER_ERROR,
-                    'Response must be HTTPStatus or tuple'
+                    'Response must be Response, HTTPStatus or tuple.'
                 )
-
-            r = Response(*resp)
 
             self.send_response(r.status)
             self.send_headers(r.get_headers())
@@ -164,12 +239,16 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
         except ObjectNotFound as err:
             self.send_error(HTTPStatus.NOT_FOUND, str(err))
         except ValidationError as err:
-            self.send_error(HTTPStatus.UNPROCESSABLE_ENTITY, str(err))
+            self.send_error(
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                err.message,
+                detail={'errors': err.errors},
+            )
         except HTTPError as err:
-            self.send_error(err.status, err.message or None)
+            self.send_error(err.status, err.message)
         except Exception as err:
             tb_str = traceback.format_exc()
-            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, tb_str)
+            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(err), detail=tb_str)
 
     do_DELETE = process_request
     do_GET = process_request
@@ -178,20 +257,34 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
     do_PUT = process_request
     do_OPTIONS = process_request
 
-    def send_headers(self, headers):
+    def send_error(
+        self,
+        status: t.Union[HTTPStatus, int],
+        message: t.Optional[str] = None,
+        explain: t.Optional[str] = None,
+        detail: t.Optional[t.Any] = None,
+    ) -> None:
+        if 'application/json' in self.headers.get('Accept', ''):
+            r = JSONResponse(status=status, body={
+                'status': status.value if isinstance(status, HTTPStatus) else status,
+                'message': message,
+                'detail': detail,
+            })
+
+            self.send_response(r.status)
+            self.send_headers(r.get_headers())
+            self.end_headers()
+
+            self.wfile.write(r.get_body())
+        else:
+            super().send_error(status, message, explain)
+
+    def send_headers(self, headers: Headers) -> None:
         for name, value in headers.items():
             self.send_header(name, value)
 
-    def send_json(self, data, status=HTTPStatus.OK):
-        try:
-            json_string = json.dumps(data, cls=JSONEncoder)
-        except TypeError:
-            return self.send_error(HTTPStatus.BAD_REQUEST)
-
-        return status, json_string, {
-            'Content-Type': 'application/json',
-            'Content-Length': str(len(json_string)),
-        }
+    def send_json(self, data: t.Any, status: HTTPStatus = HTTPStatus.OK) -> JSONResponse:
+        return JSONResponse(body=data, status=status)
 
     def send_static(self) -> None:
         path = self.root_dir / self.url.path.lstrip('/')
@@ -205,7 +298,7 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
         fs = path.stat()
 
         self.send_response(HTTPStatus.OK)
-        self.send_header('Content-type', guess_type(path))
+        self.send_header('Content-Type', guess_type(path))
         self.send_header('Content-Length', str(fs.st_size))
         self.end_headers()
 
@@ -217,12 +310,12 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
 
         return None
 
-    def render_template(self, name, **kwargs):
+    def render_template(self, name: str, **kwargs: t.Any) -> ResponseValue:
         path = self.root_dir / name
         tmpl = Template(path.read_text())
         content = tmpl.substitute(**kwargs)
         return HTTPStatus.OK, content, {
-            'Content-type': guess_type(path),
+            'Content-Type': guess_type(path),
             'Content-Length': str(len(content)),
         }
 
@@ -241,16 +334,16 @@ class HTTPServer:
         if not root_dir:
             root_dir = current_addon.get_path('resources', 'www')
 
-        self._url_handlers = {}
+        self._url_handlers: t.Dict[str, URLHandler] = {}
         self._handler = partial(
             HTTPRequestHandler, url_handlers=self._url_handlers, root_dir=root_dir
         )
 
-    def delete(self, path: str):
+    def delete(self, path: str) -> t.Callable[[_F], _F]:
         """Registers a DELETE request handler for the specified path."""
         return self.register_handler(path, method='delete')
 
-    def get(self, path: str):
+    def get(self, path: str) -> t.Callable[[_F], _F]:
         """Registers a GET request handler for the specified path."""
         return self.register_handler(path, method='get')
 
@@ -261,16 +354,16 @@ class HTTPServer:
         """Returns true if the web server is running, false otherwise."""
         return self._httpd is not None
 
-    def post(self, path: str):
+    def post(self, path: str) -> t.Callable[[_F], _F]:
         """Registers a POST request handler for the specified path."""
         return self.register_handler(path, method='post')
 
-    def put(self, path: str):
+    def put(self, path: str) -> t.Callable[[_F], _F]:
         """Registers a PUT request handler for the specified path."""
         return self.register_handler(path, method='put')
 
-    def register_handler(self, path: str, method: str):
-        def decorator(handler):
+    def register_handler(self, path: str, method: str) -> t.Callable[[_F], _F]:
+        def decorator(handler: _F) -> _F:
             handlers = self._url_handlers.setdefault(path, {})
             handlers[method] = handler
             return handler
@@ -296,7 +389,7 @@ class HTTPServer:
         try:
             self._httpd = server.ThreadingHTTPServer(self._address, self._handler)
         except socket.error as err:
-            self.log(err)
+            self.log(str(err))
             return None
 
         self.log('The server is running at http://%s:%d' % self._address)
@@ -315,7 +408,7 @@ class HTTPServer:
 
     def stop(self) -> None:
         """Stop a running server."""
-        if not self.is_running():
+        if self._httpd is None:
             return None
 
         self._httpd.shutdown()
@@ -329,14 +422,3 @@ class HTTPServer:
         self.log('Server stopped')
 
         return None
-
-
-if __name__ == '__main__':
-    srv = HTTPServer(port=9000, root_dir='.')
-
-    @srv.post('/')
-    def func(request_handler: HTTPRequestHandler):
-        print(request_handler.form.get('test'))
-        return request_handler.send_json({'status': True})
-
-    srv.start()

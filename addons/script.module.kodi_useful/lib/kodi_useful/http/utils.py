@@ -11,7 +11,13 @@ __all__ = (
 def get_content_disposition(header_value: str) -> t.Optional[str]:
     msg = Message()
     msg['Content-Disposition'] = header_value
-    return msg.get_param('filename', header='Content-Disposition')
+    param = msg.get_param('filename', header='Content-Disposition')
+
+    if isinstance(param, tuple):
+        charset, lang, value = param
+        return value.encode('latin-1').decode(charset or 'utf-8')
+
+    return param
 
 
 def split_pairs(s: str, step: int = 2, max_split: int = 3) -> t.Sequence[str]:

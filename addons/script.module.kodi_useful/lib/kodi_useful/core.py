@@ -115,6 +115,21 @@ class Addon:
         else:
             return type_(self.addon.getSetting(id_))
 
+    def set_setting(self, id_: str, value: t.Any) -> None:
+        """
+        Save the value of a setting.
+
+        Arguments:
+            id_ (str): id of the setting.
+            value: value of the setting.
+        """
+        if isinstance(value, bool):
+            self.addon.setSettingBool(id_, value)
+        elif isinstance(value, int):
+            self.addon.setSettingInt(id_, value)
+        else:
+            self.addon.setSettingString(id_, value)
+
     def localize(
         self,
         string_id: t.Union[str, int],

@@ -38,6 +38,14 @@ class Addon:
             id_ (str): id of the setting.
             type_ (type|Callable): type of the setting.
         """
+    def set_setting(self, id_: str, value: t.Any) -> None:
+        """
+        Save the value of a setting.
+
+        Arguments:
+            id_ (str): id of the setting.
+            value: value of the setting.
+        """
     def localize(self, string_id: str | int, *args: t.Any, fallback: str = '', **kwargs: t.Any) -> str:
         """Returns the translation for the passed identifier."""
     def url_for(self, func_or_name: str | t.Callable[..., None], **kwargs: t.Any) -> str:

@@ -11,5 +11,9 @@ class HTTPError(KodiUsefulError):
 class RouterError(KodiUsefulError): ...
 class ObjectNotFound(KodiUsefulError):
     """No record with the specified ID was found in the database."""
+
 class ValidationError(KodiUsefulError):
     """Any error in validating incoming data."""
+    message: Incomplete
+    errors: Incomplete
+    def __init__(self, message: str = '', errors: dict[str, str] | None = None) -> None: ...
