@@ -10,7 +10,9 @@ class HTTPError(KodiUsefulError):
 
 class RouterError(KodiUsefulError): ...
 class ObjectNotFound(KodiUsefulError):
-    """No record with the specified ID was found in the database."""
+    """No object with the specified lookup was found."""
+class MultipleObjectsFound(KodiUsefulError):
+    """Multiple objects were found but need one."""
 
 class ValidationError(KodiUsefulError):
     """Any error in validating incoming data."""

@@ -112,9 +112,9 @@ class Session(CachedSession):
         else:
             ext = ''
 
-        lookup = split_pairs(hashlib.sha256(url.encode('utf-8')).hexdigest())
+        lookup = ['requests', 'downloads', *split_pairs(hashlib.sha256(url.encode('utf-8')).hexdigest())]
         lookup[-1] += ext
-        path = current_addon.get_data_path('requests', 'downloads', *lookup)
+        path = current_addon.get_data_path(*lookup)
 
         if no_cache or not os.path.exists(path) or response.headers.get('Content-Length', 0) != os.stat(path).st_size:
             response = self.get(url, stream=stream, expire_after=0, headers=headers, **kwargs)

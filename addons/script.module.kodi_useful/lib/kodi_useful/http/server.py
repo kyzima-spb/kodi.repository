@@ -17,7 +17,7 @@ from requests import HTTPError as RequestsHTTPError
 
 from ..core import current_addon
 from ..routing import QueryParams
-from ..exceptions import HTTPError, ObjectNotFound, ValidationError
+from ..exceptions import HTTPError, MultipleObjectsFound, ObjectNotFound, ValidationError
 
 if t.TYPE_CHECKING:
     from urllib.parse import SplitResult
@@ -238,6 +238,8 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
 
             self.wfile.write(r.get_body())
+        except MultipleObjectsFound as err:
+            self.send_error(HTTPStatus.CONFLICT, str(err))
         except ObjectNotFound as err:
             self.send_error(HTTPStatus.NOT_FOUND, str(err))
         except ValidationError as err:
