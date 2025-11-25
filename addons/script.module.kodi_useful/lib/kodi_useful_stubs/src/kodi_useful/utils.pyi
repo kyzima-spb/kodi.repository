@@ -3,7 +3,7 @@ import typing as t
 import xbmcaddon
 from _typeshed import Incomplete
 
-__all__ = ['auto_cast', 'cast_bool', 'get_addon', 'get_logger', 'get_screen_resolution']
+__all__ = ['auto_cast', 'cast_bool', 'get_addon', 'get_logger', 'get_screen_resolution', 'open_browser']
 
 def auto_cast(v: str) -> t.Any:
     """Attempts to cast a string value to a known JSON type, otherwise returns the original string."""
@@ -28,6 +28,8 @@ def get_logger(addon_id: str | None = None, level: int = ...) -> logging.Logger:
     """
 def get_screen_resolution() -> tuple[int, int]:
     """Returns the screen resolution set in the settings."""
+def open_browser(url: str) -> None:
+    """Opens the specified URL in a third-party browser, if available."""
 
 class ImportNameFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool: ...

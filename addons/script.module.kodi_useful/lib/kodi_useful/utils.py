@@ -6,9 +6,11 @@ import os
 import re
 import sys
 import typing as t
+import webbrowser
 
 import xbmc
 import xbmcaddon
+import xbmcgui
 
 
 __all__ = (
@@ -17,6 +19,7 @@ __all__ = (
     'get_addon',
     'get_logger',
     'get_screen_resolution',
+    'open_browser',
 )
 
 
@@ -81,6 +84,15 @@ def get_screen_resolution() -> t.Tuple[int, int]:
     found = re.findall(r'\d+', resolution)
     width, height = (int(i) for i in found[:2])
     return width, height
+
+
+def open_browser(url: str) -> None:
+    """Opens the specified URL in a third-party browser, if available."""
+    if not webbrowser.open_new_tab(url):
+        xbmcgui.Dialog().ok(
+            get_addon().getLocalizedString(30041),
+            'Default browser not found.',
+        )
 
 
 class ImportNameFilter(logging.Filter):
