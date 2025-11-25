@@ -13,6 +13,8 @@ import traceback
 import typing as t
 from urllib.parse import urlsplit
 
+from requests import HTTPError as RequestsHTTPError
+
 from ..core import current_addon
 from ..routing import QueryParams
 from ..exceptions import HTTPError, ObjectNotFound, ValidationError
@@ -246,6 +248,17 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
             )
         except HTTPError as err:
             self.send_error(err.status, err.message)
+        except RequestsHTTPError as err:
+            detail = None
+
+            if err.response.headers.get('Content-Type', '') == 'application/json':
+                detail = err.response.json()
+
+            self.send_error(
+                err.response.status_code,
+                f'{err.response.reason} for url {err.request.url!r}',
+                detail=detail,
+            )
         except Exception as err:
             tb_str = traceback.format_exc()
             self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(err), detail=tb_str)
@@ -268,7 +281,7 @@ class HTTPRequestHandler(server.BaseHTTPRequestHandler):
             r = JSONResponse(status=status, body={
                 'status': status.value if isinstance(status, HTTPStatus) else status,
                 'message': message,
-                'detail': detail,
+                'detail': detail or {},
             })
 
             self.send_response(r.status)
