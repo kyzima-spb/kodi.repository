@@ -227,30 +227,21 @@ class Directory:
     def __init__(
         self,
         addon: t.Optional[Addon] = None,
-        cache_to_disk: bool = True,
+        cache_to_disk: t.Optional[bool] = None,
         content: Content = Content.FILES,
         content_type: t.Optional[str] = None,
         sort_methods: t.Sequence[t.Union[int, t.Tuple[int, str, str]]] = (),
-        title: str = '',
         ltitle: t.Union[int, str] = '',
+        title: str = '',
     ) -> None:
-        self._addon = addon
-        self._cache_to_disk = cache_to_disk
-
+        self.addon = addon = addon or current_addon
+        self.cache_to_disk = not addon.debug if cache_to_disk is None else cache_to_disk
         self.content = content
         self.content_type = content_type or self.content_type_map.get(content, '')
         self.sort_methods = [(i, '', '') if isinstance(i, int) else i for i in sort_methods]
 
-        self._title = title
         self._ltitle = ltitle
-
-    @property
-    def addon(self) -> Addon:
-        return self._addon or Addon.get_instance()
-
-    @property
-    def cache_to_disk(self) -> bool:
-        return False if self.addon.debug else self._cache_to_disk
+        self._title = title
 
     @cached_property
     def title(self) -> str:
